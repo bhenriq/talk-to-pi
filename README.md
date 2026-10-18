@@ -30,6 +30,7 @@ Restart pi (or run `/reload`), then type `/talk`.
 | `ctrl+shift+t` | any time | toggle `/talk` |
 | `ctrl+shift+l` | any time | toggle `/listen` |
 | `ctrl+shift+c` | any time | toggle `/conference` |
+| `ctrl+shift+o` | any time | open voice & speed menu |
 | **release** | recording | stop, transcribe, submit |
 | **Esc** | recording | cancel recording |
 | **Esc** | while pi is working/speaking | stop audio + abort the run |
@@ -121,6 +122,9 @@ curl -s https://openrouter.ai/api/v1/audio/speech \
 
 (`9BWtsMINqrJLrRacOk9x` = aria; the other curated ids map is in `src/speaker.ts`.)
 
+**Change voice or speed at any time** with `ctrl+shift+o` (or `/voice`): a small menu lets you
+pick the voice and a speed from 0.8× to 1.2×. It takes effect on pi's next sentence.
+
 Swap `tts.provider` to `"say"` for a fully offline voice, with `tts.sayVoice: "auto"`
 picking the best installed macOS English voice.
 
@@ -142,6 +146,7 @@ Edit `config.json`:
 | `input.listenShortcut` | `ctrl+shift+l` | toggle `/listen` |
 | `input.talkShortcut` | `ctrl+shift+t` | toggle `/talk` |
 | `input.conferenceShortcut` | `ctrl+shift+c` | toggle `/conference` |
+| `input.voiceShortcut` | `ctrl+shift+o` | open voice & speed menu |
 | `input.micDevice` | `MacBook Pro Microphone` | the mic always used for talk + `/listen` (never the headset mic) |
 | `input.pollMs` | `25` | native release-poll interval |
 | `input.repeatSilenceMs` | `150` | autorepeat-fallback release threshold |

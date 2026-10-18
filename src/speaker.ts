@@ -29,13 +29,38 @@ export class Speaker {
   /** Called when a sentence actually starts playing (text is the spoken sentence). */
   onSpeak?: (text: string) => void;
 
+  private voiceOverride: string | null = null;
+  private speedOverride = 1.0;
+
   constructor(
     private pi: ExtensionAPI,
     private cfg: TalkConfig,
   ) {}
 
+  /** Voices selectable in the voice menu, for the active provider. */
+  availableVoices(): string[] {
+    return this.cfg.tts.provider === "say" ? ["auto", ...SAY_VOICE_PREFS] : Object.keys(OPENROUTER_VOICES);
+  }
+
+  getVoice(): string {
+    if (this.voiceOverride) return this.voiceOverride;
+    return this.cfg.tts.provider === "say" ? this.cfg.tts.sayVoice : this.cfg.tts.voice;
+  }
+
+  getSpeed(): number {
+    return this.speedOverride;
+  }
+
+  setVoice(voice: string) {
+    this.voiceOverride = voice;
+  }
+
+  setSpeed(speed: number) {
+    this.speedOverride = speed;
+  }
+
   private async resolveSayVoice(): Promise<string | null> {
-    const v = this.cfg.tts.sayVoice;
+    const v = this.getVoice();
     if (v !== "auto") return v;
     if (this.sayVoice !== null) return this.sayVoice || null;
     this.sayVoice = "";
@@ -112,7 +137,7 @@ export class Speaker {
   }
 
   private openRouterVoiceId(): string {
-    const v = this.cfg.tts.voice;
+    const v = this.getVoice();
     if (!v || v === "auto") return OPENROUTER_VOICES.aria!;
     return OPENROUTER_VOICES[v] ?? v;
   }
@@ -132,6 +157,9 @@ export class Speaker {
         input: text,
         voice: this.openRouterVoiceId(),
         response_format: this.cfg.tts.format,
+        ...(Math.abs(this.getSpeed() - 1) > 0.001
+          ? { speed: Math.round(Math.min(1.2, Math.max(0.7, this.getSpeed())) * 100) / 100 }
+          : {}),
       }),
     });
     if (!res.ok) {
@@ -157,15 +185,16 @@ export class Speaker {
 
   private async speakSay(text: string, controller: AbortController): Promise<void> {
     const voice = await this.resolveSayVoice();
+    const rate = String(Math.round(180 * this.getSpeed()));
     if (!state.conference) {
-      const args = voice ? ["-v", voice, text] : [text];
+      const args = [...(voice ? ["-v", voice] : []), "-r", rate, text];
       await this.pi.exec(this.cfg.tts.command, args, { signal: controller.signal });
       return;
     }
     // Conference: render to AIFF, then play it into the conference output device.
     mkdirSync(this.ttsDir, { recursive: true });
     const file = join(this.ttsDir, `s-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.aiff`);
-    const args = voice ? ["-v", voice, "-o", file, text] : ["-o", file, text];
+    const args = [...(voice ? ["-v", voice] : []), "-r", rate, "-o", file, text];
     await this.pi.exec(this.cfg.tts.command, args, { signal: controller.signal });
     try {
       await this.playFile(file, controller);

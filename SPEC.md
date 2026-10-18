@@ -83,6 +83,9 @@ POST https://openrouter.ai/api/v1/chat/completions
   voice at runtime (Samantha / Flo / Reed / …), override via config.
 - Talk mode injects a **voice-style nudge** into the system prompt: answers are heard, not read —
   lead with the answer, 1–3 short sentences, no headers/tables/bullets.
+- **Runtime voice/speed menu** (`ctrl+shift+o` or `/voice`): an overlay lets you pick the voice
+  and speed (0.8×–1.2×) between utterances; applied to the next sentence. Cloud TTS passes a
+  `speed` param (clamped to the ElevenLabs 0.7–1.2 range); the `say` provider uses `say -r`.
 
 ## 4. Interrupting pi
 
@@ -118,6 +121,7 @@ space again to talk.
 | `input.listenShortcut` | `ctrl+shift+l` |
 | `input.talkShortcut` | `ctrl+shift+t` |
 | `input.conferenceShortcut` | `ctrl+shift+c` |
+| `input.voiceShortcut` | `ctrl+shift+o` |
 | `input.micDevice` | `MacBook Pro Microphone` |
 | `conference.outputDevice` | `Pi Talks (Zoom mic)` |
 | `conference.roomDevice` | `BlackHole 2ch` |

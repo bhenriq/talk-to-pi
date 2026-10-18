@@ -18,6 +18,7 @@
     "listenShortcut": "ctrl+shift+l",
     "talkShortcut": "ctrl+shift+t",
     "conferenceShortcut": "ctrl+shift+c",
+    "voiceShortcut": "ctrl+shift+o",
     "micDevice": "MacBook Pro Microphone",
     "keyCode": 49,
     "pollMs": 25,

@@ -30,6 +30,8 @@ export interface TalkConfig {
     talkShortcut: string;
     /** Keyboard shortcut to toggle /conference mode. */
     conferenceShortcut: string;
+    /** Keyboard shortcut to open the voice & speed menu. */
+    voiceShortcut: string;
     /** The microphone always used for talk and /listen (never the headset mic). */
     micDevice: string;
     /** macOS virtual keycode: 49 = space. */
@@ -102,7 +104,7 @@ const DEFAULTS: TalkConfig = {
     model: "elevenlabs/eleven-flash-v2.5",
     format: "mp3",
   },
-  input: { key: "space", listenShortcut: "ctrl+shift+l", talkShortcut: "ctrl+shift+t", conferenceShortcut: "ctrl+shift+c", micDevice: "MacBook Pro Microphone", keyCode: 49, pollMs: 25, repeatSilenceMs: 150, debounceMs: 250, minRecordingMs: 400 },
+  input: { key: "space", listenShortcut: "ctrl+shift+l", talkShortcut: "ctrl+shift+t", conferenceShortcut: "ctrl+shift+c", voiceShortcut: "ctrl+shift+o", micDevice: "MacBook Pro Microphone", keyCode: 49, pollMs: 25, repeatSilenceMs: 150, debounceMs: 250, minRecordingMs: 400 },
   promptNudge: true,
   audio: { processingCue: true, volume: 0.4, intervalMs: 650 },
   listen: {

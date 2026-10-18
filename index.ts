@@ -14,6 +14,7 @@ import { Recorder } from "./src/recorder.ts";
 import { Relay } from "./src/relay.ts";
 import { summarizeMeeting } from "./src/summary.ts";
 import { getDefaultDevice, setDefaultDevice } from "./src/system-audio.ts";
+import { VoiceMenu } from "./src/voice-menu.ts";
 import { Speaker } from "./src/speaker.ts";
 import { SpeechStream } from "./src/speech-stream.ts";
 import { clearStatus, refreshStatus, resetState, setBusyAudio, state } from "./src/state.ts";
@@ -54,6 +55,7 @@ export default function (pi: ExtensionAPI) {
   let lastReleaseAt = 0;
   let prevInputDevice: string | null = null;
   let prevOutputDevice: string | null = null;
+  let menuOpen = false;
 
   function setEnabled(on: boolean, ctx: ExtensionContext) {
     state.ctx = ctx;
@@ -112,7 +114,36 @@ export default function (pi: ExtensionAPI) {
     refreshStatus();
   }
 
+  function openVoiceMenu(ctx: ExtensionContext) {
+    if (ctx.mode !== "tui") {
+      ctx.ui.notify("Voice menu requires the interactive terminal", "error");
+      return;
+    }
+    menuOpen = true;
+    void ctx.ui
+      .custom(
+        (tui, _theme, _kb, done) =>
+          new VoiceMenu(
+            tui,
+            speaker,
+            () => done(undefined),
+            (m) => ctx.ui.notify(m, "info"),
+          ),
+        { overlay: true, overlayOptions: { width: "44%", anchor: "center", margin: { top: 2 } } },
+      )
+      .finally(() => {
+        menuOpen = false;
+      });
+  }
+
   function onTerminalInput(data: string): { consume?: boolean; data?: string } | undefined {
+    // While the voice menu overlay is focused, pass all keys through to it.
+    if (menuOpen) return undefined;
+    // Voice & speed menu.
+    if (matchesKey(data, cfg.input.voiceShortcut)) {
+      if (state.ctx) openVoiceMenu(state.ctx);
+      return { consume: true };
+    }
     // Conference toggle.
     if (matchesKey(data, cfg.input.conferenceShortcut)) {
       if (state.ctx) void toggleConference(state.ctx);
@@ -310,6 +341,11 @@ export default function (pi: ExtensionAPI) {
     handler: async (_args, ctx) => {
       await toggleConference(ctx);
     },
+  });
+
+  pi.registerCommand("voice", {
+    description: "Open the voice & speed menu for pi's speech",
+    handler: async (_args, ctx) => openVoiceMenu(ctx),
   });
 
   // ── Listen transcript tool ─────────────────────────────────────────────────
