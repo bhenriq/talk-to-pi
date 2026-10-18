@@ -9,6 +9,8 @@ export const state = {
   speaking: false,
   recording: false,
   transcribing: false,
+  listenRecording: false,
+  listenChunks: 0,
 };
 
 // Voice-wave animation frames shown while waiting (transcribing or thinking).
@@ -45,6 +47,8 @@ export function resetState() {
   state.speaking = false;
   state.recording = false;
   state.transcribing = false;
+  state.listenRecording = false;
+  state.listenChunks = 0;
 }
 
 /** Waiting = between releasing the talk key and pi starting to speak back. */
@@ -84,7 +88,7 @@ export function phase(): TalkPhase {
   return "idle";
 }
 
-function currentLabel(): string | undefined {
+function talkLabel(): string | undefined {
   if (!state.enabled) return undefined;
   if (state.recording) return "🎙 listening";
   if (state.transcribing) return `🎙 transcribing ${WAVE_FRAMES[animStep]}`;
@@ -93,12 +97,19 @@ function currentLabel(): string | undefined {
   return "🎙 talk: idle";
 }
 
+function listenLabel(): string | undefined {
+  if (!state.listenRecording) return undefined;
+  return `📝 listen: recording · ${state.listenChunks} segments`;
+}
+
 export function refreshStatus() {
   ensureAnimation();
-  state.ctx?.ui.setStatus("talk-to-pi", currentLabel());
+  state.ctx?.ui.setStatus("talk-to-pi-talk", talkLabel());
+  state.ctx?.ui.setStatus("talk-to-pi-listen", listenLabel());
 }
 
 export function clearStatus() {
   stopAnimation();
-  state.ctx?.ui.setStatus("talk-to-pi", undefined);
+  state.ctx?.ui.setStatus("talk-to-pi-talk", undefined);
+  state.ctx?.ui.setStatus("talk-to-pi-listen", undefined);
 }

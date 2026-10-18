@@ -24,6 +24,10 @@ export interface TalkConfig {
   };
   input: {
     key: string;
+    /** Keyboard shortcut to toggle /listen (start/stop mic transcription). */
+    listenShortcut: string;
+    /** Keyboard shortcut to toggle /talk mode. */
+    talkShortcut: string;
     /** macOS virtual keycode: 49 = space. */
     keyCode: number;
     pollMs: number;
@@ -44,6 +48,22 @@ export interface TalkConfig {
     /** Pause between cue notes, in ms. */
     intervalMs: number;
   };
+  listen: {
+    model: string;
+    sampleRate: number;
+    channels: number;
+    bits: number;
+    chunkSeconds: number;
+    skipSilence: boolean;
+    /** RMS threshold (0..1) below which a chunk is treated as silence and skipped. */
+    silenceThreshold: number;
+    /** Directory for persisted transcripts. `~` expands to the home directory. */
+    outputDir: string;
+    /** How much of the recent transcript to inject into the system prompt. */
+    contextWindowChars: number;
+    /** How many recent transcript lines to show in the live footer widget (max 10). */
+    widgetLines: number;
+  };
 }
 
 const DEFAULTS: TalkConfig = {
@@ -56,9 +76,21 @@ const DEFAULTS: TalkConfig = {
     model: "elevenlabs/eleven-flash-v2.5",
     format: "mp3",
   },
-  input: { key: "space", keyCode: 49, pollMs: 25, repeatSilenceMs: 150, debounceMs: 250, minRecordingMs: 400 },
+  input: { key: "space", listenShortcut: "ctrl+shift+l", talkShortcut: "ctrl+shift+t", keyCode: 49, pollMs: 25, repeatSilenceMs: 150, debounceMs: 250, minRecordingMs: 400 },
   promptNudge: true,
   audio: { processingCue: true, volume: 0.4, intervalMs: 650 },
+  listen: {
+    model: "deepgram/nova-3",
+    sampleRate: 16000,
+    channels: 1,
+    bits: 16,
+    chunkSeconds: 5,
+    skipSilence: true,
+    silenceThreshold: 0.005,
+    outputDir: "~/.pi/listen",
+    contextWindowChars: 6000,
+    widgetLines: 8,
+  },
 };
 
 function merge(base: Record<string, unknown>, over: Record<string, unknown>): Record<string, unknown> {

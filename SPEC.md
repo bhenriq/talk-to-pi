@@ -13,10 +13,10 @@ real pi TUI session is the only remaining untested path.
 
 | | |
 |---|---|
-| Command | `/talk` — toggles voice mode on/off |
+| Command | `/talk` — toggles voice mode on/off (or `ctrl+shift+t`) |
 | Default on session start | **off** (mode is not persisted across sessions) |
 | Off means | keys behave exactly like stock pi; no recording, no speech |
-| Off-switch | `/talk` again, **or** Esc pressed while idle (talk mode on, nothing running) exits talk mode |
+| Off-switch | `/talk` again or `ctrl+shift+t`. **Esc never exits a mode** — only the command/shortcut toggles on/off |
 
 While the mode is on, a footer status shows the state:
 `🎙 talk: idle` / `🎙 listening` / `🎙 transcribing …` / `🧠 thinking …` / `🔊 speaking`.
@@ -44,8 +44,8 @@ transcript is **auto-submitted** as a normal user message.
 - Reason: iTerm2 + tmux do not deliver Kitty key-release events, so the terminal cannot report release.
   The OS keyboard state bypasses tmux entirely.
 - A space press within 250 ms of a release is ignored (debounce), so the tail of a hold never restarts recording.
-- **Space while pi is speaking** is ignored entirely — it does not interrupt speech and does not start
-  a recording. Esc alone interrupts (see §4).
+- **Space while pi is speaking** barge-ins: it interrupts (stops speech + aborts the run) **and** starts
+  a new recording immediately, so you can retake the turn.
 - **Esc while recording** cancels: recording discarded, nothing submitted.
 - **While pi is busy** (run in progress), holding space does nothing at all. Interrupting work is done
   with Esc (see §4).
@@ -86,12 +86,13 @@ POST https://openrouter.ai/api/v1/chat/completions
 
 ## 4. Interrupting pi
 
-**Esc while pi is speaking or working → audio stops immediately and the run is aborted** (exactly pi's
-normal Esc semantics). Back to idle; hold space again to talk.
+**Esc while pi is speaking or working → audio stops immediately and the run is aborted.** Back to idle; hold
+space again to talk.
 
-- **Esc while idle** (talk mode on, nothing running) exits talk mode.
+- **Esc while idle** does nothing — Esc never exits a mode; only `/talk`, `/listen`, or the
+  `ctrl+shift+t` / `ctrl+shift+l` shortcuts toggle modes.
 - **Esc while transcribing** is ignored (the transcript still auto-submits).
-- No barge-in: the interrupting press does not start a recording; space during speech is ignored.
+- **Space while pi is speaking** barge-ins: same interrupt as Esc, plus a new recording starts immediately.
 - Killing the audio means killing the active playback process (`afplay` for cloud TTS, `say` for the
   offline provider) and dropping the sentence queue; nothing already killed can leak through.
 
@@ -114,10 +115,18 @@ normal Esc semantics). Back to idle; hold space again to talk.
 | `input.repeatSilenceMs` | `150` |
 | `input.debounceMs` | `250` |
 | `input.minRecordingMs` | `400` |
+| `input.listenShortcut` | `ctrl+shift+l` |
+| `input.talkShortcut` | `ctrl+shift+t` |
 | `promptNudge` | `true` |
 | `audio.processingCue` | `true` |
 | `audio.volume` | `0.4` |
 | `audio.intervalMs` | `650` |
+| `listen.model` | `deepgram/nova-3` |
+| `listen.chunkSeconds` | `5` |
+| `listen.skipSilence` / `silenceThreshold` | `true` / `0.008` |
+| `listen.outputDir` | `~/.pi/listen` |
+| `listen.contextWindowChars` | `6000` |
+| `listen.widgetLines` | `8` |
 
 ## 6. Packaging
 
@@ -139,10 +148,26 @@ normal Esc semantics). Back to idle; hold space again to talk.
 - Errors (mic missing, network, API failure) surface as a short status/notify and never crash the session.
 - Temp WAV files are removed after transcription; TTS MP3 temp files are removed after playback.
 
-## 8. Out of scope (for now)
+## 8. Listen mode (`/listen`)
+
+A separate, listen-only mode. `/listen` or the `ctrl+shift+l` shortcut toggles it.
+
+- Repeatedly records the **microphone** into raw PCM with `sox` and slices it into
+  `listen.chunkSeconds` chunks; silent chunks (RMS < `silenceThreshold`) are skipped.
+- Each speaking chunk is transcribed via OpenRouter `/api/v1/audio/transcriptions`
+  (`listen.model`, default `deepgram/nova-3`), ~5 s behind real time. No diarization.
+- Transcript accumulates in memory and is appended to a Markdown file in `listen.outputDir`.
+- **Context**: the last `contextWindowChars` of the transcript is injected into the system
+  prompt on every turn (a `listen_transcript` prompt section); a model-callable
+  `listen_transcript` tool searches the full transcript for older content.
+- Listen mode is independent of talk mode and does not trigger TTS or the busy cue.
+- Footer shows `📝 listen: recording · N segments`; a widget above the editor streams the last
+  `listen.widgetLines` transcript lines live as it unfolds.
+
+## 9. Out of scope (for now)
 
 - VAD / silence-based auto-stop, continuous listening.
-- Barge-in recording while pi speaks.
+
 - Speaking tool activity or a summary-only mode.
 - Local STT (`whisper.cpp`), macOS Speech framework.
 - Streaming (byte-level) TTS playback — we synthesize per sentence and buffer.

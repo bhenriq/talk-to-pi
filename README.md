@@ -4,7 +4,7 @@ A pi extension that adds a **`/talk`** voice mode: hold space to talk, pi answer
 
 - **Hold `space`** → pi records your voice (`sox` → OpenRouter `input_audio` STT).
 - **Release** → pi transcribes and auto-submits it as your message.
-- **Esc** → stop pi talking and abort the run; when idle, Esc exits talk mode.
+- **Esc** → stop pi talking and abort the run (or cancel an in-progress recording). Esc never exits a mode.
 - pi's answers are **spoken aloud** (OpenRouter → ElevenLabs TTS by default, `say` offline fallback), streamed sentence by sentence.
 
 See [`SPEC.md`](SPEC.md) for the full behaviour contract and [`config.json`](config.json) for tunables.
@@ -26,10 +26,13 @@ Restart pi (or run `/reload`), then type `/talk`.
 | key | when | action |
 |---|---|---|
 | **hold `space`** | idle, talk mode on | start recording |
+| **space** | while pi is speaking | interrupt + start recording (barge-in) |
+| `ctrl+shift+t` | any time | toggle `/talk` |
+| `ctrl+shift+l` | any time | toggle `/listen` |
 | **release** | recording | stop, transcribe, submit |
 | **Esc** | recording | cancel recording |
 | **Esc** | while pi is working/speaking | stop audio + abort the run |
-| **Esc** | idle, talk mode on | exit talk mode |
+| **Esc** | idle | does nothing (never exits a mode) |
 | `/talk` | any time | toggle talk mode |
 
 While talk mode is on, `space` is reserved for recording (it is never inserted into the
@@ -42,6 +45,19 @@ you can see pi is working from the moment you release space until it starts spea
 A soft two-note audio cue (a gentle low→high blip every ~0.6 s) plays during the same wait
 window, so you can also **hear** that pi is processing. It stops the instant speech starts or
 the mode turns off. Disable it with `audio.processingCue: false`.
+
+## Listen mode
+
+`/listen` records the **microphone** continuously and transcribes it in ~5 s chunks via
+OpenRouter's `/audio/transcriptions` endpoint (default `deepgram/nova-3`), skipping silence.
+The running transcript is appended to a Markdown file and made available to pi:
+
+- the **most recent part** is injected into the system prompt on every turn, and
+- the **`listen_transcript` tool** lets pi search the whole transcript for older content.
+
+`/listen` (or `ctrl+shift+l`) toggles recording; the footer shows `📝 listen: recording · N segments`.
+The last few transcript lines also stream live in a widget above the editor as it unfolds.
+Transcripts persist to `~/.pi/listen/` (configurable).
 
 ## Requirements
 
@@ -87,6 +103,8 @@ Edit `config.json`:
 | `tts.command` | `say` | TTS binary used by the `say` provider |
 | `tts.sayVoice` | `auto` | voice name for the `say` provider |
 | `input.key` / `keyCode` | `space` / `49` | talk key |
+| `input.listenShortcut` | `ctrl+shift+l` | toggle `/listen` |
+| `input.talkShortcut` | `ctrl+shift+t` | toggle `/talk` |
 | `input.pollMs` | `25` | native release-poll interval |
 | `input.repeatSilenceMs` | `150` | autorepeat-fallback release threshold |
 | `input.debounceMs` | `250` | ignore a press this soon after release |
@@ -95,6 +113,12 @@ Edit `config.json`:
 | `audio.processingCue` | `true` | audible blip while waiting (transcribing/thinking) |
 | `audio.volume` | `0.4` | cue volume (0–1) |
 | `audio.intervalMs` | `650` | pause between cue notes |
+| `listen.model` | `deepgram/nova-3` | OpenRouter STT model |
+| `listen.chunkSeconds` | `5` | transcription chunk size |
+| `listen.skipSilence` / `silenceThreshold` | `true` / `0.008` | skip silent chunks |
+| `listen.outputDir` | `~/.pi/listen` | transcript storage directory |
+| `listen.contextWindowChars` | `6000` | recent transcript injected into the prompt |
+| `listen.widgetLines` | `8` | live transcript lines shown above the editor |
 
 ## How release is detected
 

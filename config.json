@@ -15,6 +15,8 @@
   },
   "input": {
     "key": "space",
+    "listenShortcut": "ctrl+shift+l",
+    "talkShortcut": "ctrl+shift+t",
     "keyCode": 49,
     "pollMs": 25,
     "repeatSilenceMs": 150,
@@ -26,5 +28,17 @@
     "processingCue": true,
     "volume": 0.4,
     "intervalMs": 650
+  },
+  "listen": {
+    "model": "deepgram/nova-3",
+    "sampleRate": 16000,
+    "channels": 1,
+    "bits": 16,
+    "chunkSeconds": 5,
+    "skipSilence": true,
+    "silenceThreshold": 0.005,
+    "outputDir": "~/.pi/listen",
+    "contextWindowChars": 6000,
+    "widgetLines": 8
   }
 }
