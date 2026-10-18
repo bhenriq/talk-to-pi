@@ -64,8 +64,8 @@ identified speaker (everyone else is unlabeled).
 The most recent transcript lines stream in a widget above the editor.
 
 When you **stop** `/listen`, pi offers to save a finalized Markdown file: an LLM-written
-summary at the top, and a filename like `2026-10-18-q3-launch-plan.md` (date + a slug
-summarizing the meeting). Declining keeps the raw transcript file. Output dir: `~/.pi/listen/`.
+summary at the top, and a filename `date_title.md` — e.g. `2026-10-18_q3-launch-plan.md` — where the
+title is a short summary of the conversation. Declining keeps the raw transcript file. Output dir: `~/.pi/listen/`.
 
 ## Conference mode
 
@@ -169,7 +169,7 @@ Edit `config.json`:
 | `conference.switchSystemDevices` | `true` | auto-switch these on enter, restore on exit |
 | `listen.contextWindowChars` | `6000` | recent transcript injected into the prompt |
 | `listen.widgetLines` | `8` | transcript lines shown above the editor |
-| `listen.summaryModel` | `deepseek/deepseek-chat` | model that writes the save-time summary + slug |
+| `listen.summaryModel` | `deepseek/deepseek-chat` | model that writes the save-time summary + title |
 
 ## How release is detected
 

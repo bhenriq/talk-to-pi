@@ -225,9 +225,9 @@ export default function (pi: ExtensionAPI) {
         ? join(homedir(), cfg.listen.outputDir.slice(1))
         : cfg.listen.outputDir;
       const date = new Date(listener.startTime || Date.now()).toISOString().slice(0, 10);
-      let file = join(dir, `${date}-${slug}.md`);
+      let file = join(dir, `${date}_${slug}.md`);
       let i = 1;
-      while (existsSync(file)) file = join(dir, `${date}-${slug}-${i++}.md`);
+      while (existsSync(file)) file = join(dir, `${date}_${slug}-${i++}.md`);
       writeFileSync(file, `# Meeting — ${slug}\n\n## Summary\n${summary}\n\n## Transcript\n${transcript}\n`);
       if (rawPath && rawPath !== file) {
         try {

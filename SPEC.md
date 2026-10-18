@@ -180,7 +180,8 @@ A separate, listen-only mode. `/listen` or the `ctrl+shift+l` shortcut toggles i
 - pi's own spoken answers are appended as `pi: …` lines (exact text, no STT) while listening;
   pi is the only identified speaker, other lines are unlabeled.
 - **On stop**, pi offers to save a finalized Markdown file: an LLM summary at the top and filename
-  `YYYY-MM-DD-<slug>.md` (date + a slug summarizing the meeting); declining keeps the raw file.
+  `YYYY-MM-DD_<title>.md` — a `date_title` filename where the title is a short summary of the
+  conversation; declining keeps the raw file.
 
 ## 9. Conference mode (`/conference`)
 
