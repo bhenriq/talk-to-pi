@@ -22,12 +22,25 @@ static NSString *deviceName(AudioDeviceID d) {
     return nil;
 }
 
-static AudioDeviceID findByName(NSString *name) {
+static BOOL hasStreams(AudioDeviceID d, BOOL isInput) {
+    AudioObjectPropertyScope scope = isInput ? kAudioDevicePropertyScopeInput : kAudioDevicePropertyScopeOutput;
+    AudioObjectPropertyAddress a = { kAudioDevicePropertyStreams, scope, kAudioObjectPropertyElementMain };
+    UInt32 sz = 0;
+    return AudioObjectGetPropertyDataSize(d, &a, 0, NULL, &sz) == noErr && sz > 0;
+}
+
+static AudioDeviceID findByName(NSString *name, BOOL isInput) {
+    AudioDeviceID fallback = kAudioObjectUnknown;
     for (UInt32 i = 0; i < g_count; i++) {
         NSString *n = deviceName(g_devs[i]);
-        if (n && [n isEqualToString:name]) return g_devs[i];
+        if (n && [n isEqualToString:name]) {
+            // Prefer the side that actually has streams for the requested direction
+            // (e.g. "OpenSwim Pro by Shokz" has separate input and output devices).
+            if (hasStreams(g_devs[i], isInput)) return g_devs[i];
+            if (fallback == kAudioObjectUnknown) fallback = g_devs[i];
+        }
     }
-    return kAudioObjectUnknown;
+    return fallback;
 }
 
 static AudioObjectPropertySelector selectorFor(NSString *type, BOOL isSystemOutput) {
@@ -47,7 +60,7 @@ static int getDevice(NSString *type, BOOL isSystemOutput) {
 }
 
 static int setDevice(NSString *type, NSString *name) {
-    AudioDeviceID d = findByName(name);
+    AudioDeviceID d = findByName(name, [type isEqualToString:@"input"]);
     if (d == kAudioObjectUnknown) {
         fprintf(stderr, "device not found: %s\n", name.UTF8String);
         return 1;
