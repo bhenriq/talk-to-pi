@@ -9,7 +9,8 @@
     "provider": "openrouter",
     "command": "say",
     "sayVoice": "auto",
-    "voice": "aria",
+    "voice": "rachel",
+    "speed": 1.2,
     "model": "elevenlabs/eleven-flash-v2.5",
     "format": "mp3"
   },

@@ -30,7 +30,7 @@ export class Speaker {
   onSpeak?: (text: string) => void;
 
   private voiceOverride: string | null = null;
-  private speedOverride = 1.0;
+  private speedOverride: number | null = null;
 
   constructor(
     private pi: ExtensionAPI,
@@ -48,7 +48,7 @@ export class Speaker {
   }
 
   getSpeed(): number {
-    return this.speedOverride;
+    return this.speedOverride ?? this.cfg.tts.speed;
   }
 
   setVoice(voice: string) {

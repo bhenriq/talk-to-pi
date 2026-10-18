@@ -105,7 +105,7 @@ on "same as system" and let `/conference` switch the system defaults for you.
 
 ## Voices
 
-The default TTS voice is **aria** (ElevenLabs Flash v2.5, through OpenRouter — no extra key).
+The default TTS voice is **rachel** at **1.2×** (ElevenLabs Flash v2.5, through OpenRouter — no extra key).
 Available curated voices, set via `tts.voice` in `config.json`:
 
 `aria` · `rachel` · `sarah` · `adam` · `antoni` · `george` — or any raw ElevenLabs voice id.
@@ -120,7 +120,7 @@ curl -s https://openrouter.ai/api/v1/audio/speech \
   -o /tmp/voice.mp3 && afplay /tmp/voice.mp3
 ```
 
-(`9BWtsMINqrJLrRacOk9x` = aria; the other curated ids map is in `src/speaker.ts`.)
+(`21m00Tcm4TlvDq8ikWAM` = rachel; the other curated ids map is in `src/speaker.ts`.)
 
 **Change voice or speed at any time** with `ctrl+shift+o` (or `/voice`): a small menu lets you
 pick the voice and a speed from 0.8× to 1.2×. It takes effect on pi's next sentence.
@@ -138,7 +138,8 @@ Edit `config.json`:
 | `stt.sampleRate` / `channels` / `bits` | `16000` / `1` / `16` | sox capture format |
 | `tts.provider` | `openrouter` | `openrouter` (cloud) or `say` (offline) |
 | `tts.model` | `elevenlabs/eleven-flash-v2.5` | OpenRouter TTS model |
-| `tts.voice` | `aria` | voice name or ElevenLabs voice id (cloud) |
+| `tts.voice` | `rachel` | voice name or ElevenLabs voice id (cloud) |
+| `tts.speed` | `1.2` | default speed multiplier (0.8–1.2) |
 | `tts.format` | `mp3` | output format for cloud TTS |
 | `tts.command` | `say` | TTS binary used by the `say` provider |
 | `tts.sayVoice` | `auto` | voice name for the `say` provider |

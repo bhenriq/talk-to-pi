@@ -19,6 +19,8 @@ export interface TalkConfig {
     sayVoice: string;
     /** Voice name or ElevenLabs voice id for the `openrouter` provider. */
     voice: string;
+    /** Default speaking speed multiplier. */
+    speed: number;
     model: string;
     format: "mp3" | "pcm";
   };
@@ -100,7 +102,8 @@ const DEFAULTS: TalkConfig = {
     provider: "openrouter",
     command: "say",
     sayVoice: "auto",
-    voice: "aria",
+    voice: "rachel",
+    speed: 1.2,
     model: "elevenlabs/eleven-flash-v2.5",
     format: "mp3",
   },

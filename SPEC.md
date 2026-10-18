@@ -76,7 +76,7 @@ POST https://openrouter.ai/api/v1/chat/completions
   - Fenced code blocks are skipped **silently**.
   - Tool calls, tool results, thinking, and confirm dialogs are never spoken.
 - `tts.provider: "openrouter"` (default) sends text to OpenRouter `/api/v1/audio/speech` with model
-  `elevenlabs/eleven-flash-v2.5` and voice `aria` (voice id `9BWtsMINqrJLrRacOk9x`); the MP3 reply is
+  `elevenlabs/eleven-flash-v2.5` and voice `rachel` at 1.2× (voice id `21m00Tcm4TlvDq8ikWAM`); the MP3 reply is
   written to a temp file and played with `afplay`, then deleted. On any network/API error it falls
   back to `say`.
 - `tts.provider: "say"` uses macOS `say`; `tts.sayVoice: "auto"` picks the best installed English
@@ -108,7 +108,8 @@ space again to talk.
 | `tts.provider` | `openrouter` (`say` = offline) |
 | `tts.command` | `say` (only used by the `say` provider) |
 | `tts.sayVoice` | `auto` (best installed English voice at runtime) |
-| `tts.voice` | `aria` (friendly name or ElevenLabs voice id) |
+| `tts.voice` | `rachel` (friendly name or ElevenLabs voice id) |
+| `tts.speed` | `1.2` |
 | `tts.model` | `elevenlabs/eleven-flash-v2.5` |
 | `tts.format` | `mp3` |
 | `stt.channels` / `stt.bits` | `1` / `16` |
