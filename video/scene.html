@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>talk-to-pi — explainer</title>
+<link rel="stylesheet" href="build/theme.css">
+<script src="build/timeline.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1600px; height: 900px; overflow: hidden; background: var(--bg); }
+  body {
+    font: 21px/1.55 "SF Mono", "Menlo", "DejaVu Sans Mono", monospace;
+    color: var(--text); -webkit-font-smoothing: antialiased;
+  }
+  .stage { position: absolute; inset: 0; overflow: hidden;
+    background: radial-gradient(1200px 700px at 22% -10%, #1b1b22 0%, var(--bg) 62%); }
+  .scene { position: absolute; inset: 0; opacity: 0; }
+  .hdr { position: absolute; left: 56px; right: 56px; top: 34px; display: flex;
+    justify-content: space-between; align-items: center; font-size: 17px; }
+  .hdr .brand { color: var(--violet); font-weight: 700; letter-spacing: .5px; }
+  .hdr .path { color: var(--dim); }
+  .hdr .right { color: var(--dim); }
+  .pill { display: inline-block; padding: 2px 12px; border: 1px solid var(--borderMuted);
+    border-radius: 999px; color: var(--muted); font-size: 15px; }
+
+  /* terminal body */
+  .term { position: absolute; left: 56px; right: 56px; top: 96px; bottom: 156px; }
+  .msg-user { background: var(--userMessageBg); border-left: 3px solid var(--blue);
+    border-radius: 6px; padding: 12px 18px; color: var(--text); max-width: 1040px; }
+  .msg-ai { color: var(--text); max-width: 1150px; }
+  .msg-ai .row { display: block; }
+  .msg-ai .say { padding: 1px 4px; border-radius: 4px; }
+  .tool { background: var(--toolPendingBg); border-radius: 6px; padding: 10px 16px;
+    font-size: 18px; color: var(--muted); border-left: 3px solid var(--borderMuted); }
+  .tool.ok { background: var(--toolSuccessBg); border-left-color: var(--green); }
+  .label { color: var(--dim); font-size: 16px; letter-spacing: .4px; }
+  .dim { color: var(--dim); } .muted { color: var(--muted); }
+  .violet { color: var(--violet); } .green { color: var(--green); } .blue { color: var(--blue); }
+  .yellow { color: var(--yellow); } .red { color: var(--red); }
+
+  /* editor + footer */
+  .editor { position: absolute; left: 56px; right: 56px; bottom: 74px; height: 62px;
+    border: 1px solid var(--borderMuted); border-radius: 8px; background: #14141a;
+    display: flex; align-items: center; padding: 0 18px; gap: 12px; }
+  .editor .chev { color: var(--violet); }
+  .editor .txt { color: var(--text); white-space: pre; }
+  .caret { display: inline-block; width: 11px; height: 24px; background: var(--text);
+    vertical-align: -4px; }
+  .footer { position: absolute; left: 56px; right: 56px; bottom: 30px; height: 34px;
+    display: flex; align-items: center; gap: 18px; font-size: 17px; color: var(--dim); }
+  .footer .mode { color: var(--muted); }
+  .wave { display: flex; align-items: center; gap: 3px; height: 22px; }
+  .wave i { display: block; width: 3px; border-radius: 2px; background: var(--green); }
+
+  /* keycaps */
+  .key { display: inline-block; border: 1px solid var(--borderMuted); border-bottom-width: 3px;
+    border-radius: 6px; padding: 3px 11px; font-size: 16px; color: var(--muted); background: #1a1a21; }
+  .key.on { border-color: var(--green); color: var(--green); background: #1b2a22; }
+  .key .k { color: var(--text); }
+
+  /* transcript widget */
+  .tw { border: 1px solid var(--borderMuted); border-radius: 8px; background: #131319;
+    padding: 12px 16px; }
+  .tw .th { font-size: 15px; color: var(--dim); letter-spacing: .5px; margin-bottom: 6px; }
+  .tw .ln { font-size: 18px; line-height: 1.5; color: var(--muted); white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; }
+  .tw .ln b { color: var(--blue); font-weight: 400; }
+
+  /* cards / title */
+  .center { position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 26px; }
+  .logo { font-size: 92px; font-weight: 700; letter-spacing: -2px; color: var(--text); }
+  .logo .t { color: var(--violet); }
+  .sub { font-size: 24px; color: var(--muted); }
+  .chip { border: 1px solid var(--borderMuted); border-radius: 999px; padding: 10px 26px;
+    font-size: 24px; color: var(--text); background: #16161d; }
+  .chip .kk { color: var(--dim); font-size: 16px; margin-left: 12px; }
+  .card { border: 1px solid var(--borderMuted); border-radius: 10px; background: #14141b;
+    padding: 18px 22px; }
+  .row { display: flex; align-items: center; }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+
+  <!-- ══ 1 · hook ══ -->
+  <section class="scene" id="s-hook">
+    <div class="hdr"><div><span class="brand">pi</span> <span class="path">~/Dev/talk-to-pi</span></div>
+      <div class="right">dark · 160×44</div></div>
+    <div class="term">
+      <div class="label" id="hook-l1" style="margin-bottom:18px">shipping something today</div>
+      <div class="msg-user" id="hook-line" style="max-width:1000px"><span id="hook-typed"></span><span class="caret" id="hook-caret"></span></div>
+      <div class="row" style="margin-top:56px; gap:64px">
+        <div id="hook-a" style="opacity:0">
+          <div class="label">typing</div>
+          <div style="font-size:52px; color:var(--muted)" class="row">40 <span style="font-size:22px;color:var(--dim);margin-left:10px">wpm</span></div>
+          <div id="hook-bar-a" style="height:8px;background:var(--muted);border-radius:4px;margin-top:10px"></div>
+        </div>
+        <div id="hook-b" style="opacity:0">
+          <div class="label">speaking</div>
+          <div style="font-size:52px; color:var(--green)" class="row">150 <span style="font-size:22px;color:var(--dim);margin-left:10px">wpm</span></div>
+          <div id="hook-bar-b" style="height:8px;background:var(--green);border-radius:4px;margin-top:10px"></div>
+        </div>
+      </div>
+    </div>
+    <div class="editor"><span class="chev">›</span><span class="txt"></span><span class="caret" id="hook-caret2"></span></div>
+    <div class="footer"><span class="mode">talk: off</span></div>
+  </section>
+
+  <!-- ══ 2 · shift ══ -->
+  <section class="scene" id="s-shift">
+    <div class="center">
+      <div class="logo" id="shift-logo">talk<span class="t">-to-pi</span></div>
+      <div class="sub" id="shift-sub">voice, for your terminal agent</div>
+      <div class="row" style="gap:18px; margin-top:26px">
+        <div class="chip" id="chip1">/talk<span class="kk">ctrl+shift+t</span></div>
+        <div class="chip" id="chip2">/listen<span class="kk">ctrl+shift+l</span></div>
+        <div class="chip" id="chip3">/conference<span class="kk">ctrl+shift+c</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 3 · talk ══ -->
+  <section class="scene" id="s-talk">
+    <div class="hdr"><div><span class="brand">pi</span> <span class="path">~/Dev/talk-to-pi</span></div>
+      <div class="right">talk mode</div></div>
+    <div class="term" id="talk-term">
+      <div class="msg-user" id="talk-user" style="opacity:0"><span id="talk-user-txt"></span></div>
+      <div id="talk-ai" style="opacity:0; margin-top:26px">
+        <div class="msg-ai">
+          <div class="row"><span class="say" id="say1">Done — the upload retries twice with backoff now.</span></div>
+          <div class="row"><span class="say" id="say2">I moved the sleep into the loop so the second try waits 200 ms.</span></div>
+          <div class="row"><span class="say" id="say3">The test that was failing passes; I left the old helper in place.</span></div>
+        </div>
+        <div class="tool ok" id="talk-tool" style="opacity:0; margin-top:22px">✓ edit src/upload.ts · +14 −3</div>
+      </div>
+      <div class="card" id="talk-keys" style="opacity:0; position:absolute; left:0; bottom:0; display:flex; gap:26px; align-items:center">
+        <span class="key" id="k-space"><span class="k">space</span> hold to talk</span>
+        <span class="key" id="k-esc"><span class="k">esc</span> interrupt</span>
+        <span class="dim" style="font-size:17px">esc never leaves the mode</span>
+      </div>
+    </div>
+    <div class="editor"><span class="chev">›</span><span class="txt" id="talk-editor"></span><span class="caret" id="talk-caret"></span></div>
+    <div class="footer">
+      <span class="mode" id="talk-state">🎙 talk: idle</span>
+      <span class="wave" id="talk-wave"></span>
+    </div>
+  </section>
+
+  <!-- ══ 4 · listen ══ -->
+  <section class="scene" id="s-listen">
+    <div class="hdr"><div><span class="brand">pi</span> <span class="path">~/Dev/talk-to-pi</span></div>
+      <div class="right">listen mode</div></div>
+    <div class="term">
+      <div class="tw" id="listen-tw" style="height:180px; overflow:hidden">
+        <div class="th">live transcript · microphone</div>
+        <div class="ln" id="ln1"></div>
+        <div class="ln" id="ln2"></div>
+        <div class="ln" id="ln3"></div>
+        <div class="ln" id="ln4"></div>
+        <div class="ln" id="ln5"></div>
+      </div>
+      <div class="msg-user" id="listen-user" style="opacity:0; margin-top:26px"><span id="listen-user-txt"></span></div>
+      <div class="msg-ai" id="listen-ai" style="opacity:0; margin-top:22px; max-width:1180px">
+        <div id="listen-ai-txt"></div>
+        <div class="dim" id="listen-cite" style="font-size:17px; opacity:0">from transcript · 10:04, 10:07</div>
+      </div>
+      <div class="card" id="listen-save" style="opacity:0; margin-top:24px; display:flex; gap:22px; align-items:flex-start; max-width:1000px">
+        <div style="font-size:34px">📝</div>
+        <div>
+          <div class="violet" id="listen-file">2026-10-18_q3-launch-plan.md</div>
+          <div class="muted" style="font-size:18px; margin-top:6px">summary + full transcript, written by pi</div>
+        </div>
+      </div>
+    </div>
+    <div class="editor"><span class="chev">›</span><span class="txt" id="listen-editor"></span><span class="caret" id="listen-caret"></span></div>
+    <div class="footer"><span class="mode" id="listen-state">📝 listen: recording · 0 segments</span></div>
+  </section>
+
+  <!-- ══ 5 · conference ══ -->
+  <section class="scene" id="s-conf">
+    <div class="hdr"><div><span class="brand">pi</span> <span class="path">~/Dev/talk-to-pi</span></div>
+      <div class="right">conference mode</div></div>
+    <div style="position:absolute; left:56px; top:110px; width:520px">
+      <div class="card" id="call" style="padding:16px">
+        <div class="row" style="justify-content:space-between; margin-bottom:14px">
+          <span class="label">zoom call · design review</span>
+          <span class="green" style="font-size:15px">● 10:04</span>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
+          <div class="tile" style="background:#22222b;border-radius:8px;height:126px;display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--muted)">SM</div>
+          <div class="tile" style="background:#22222b;border-radius:8px;height:126px;display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--muted)">JD</div>
+          <div class="tile" id="tile-pi" style="background:#22222b;border-radius:8px;height:126px;display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--dim)">you</div>
+          <div class="tile" style="background:#1b1b22;border-radius:8px;height:126px;display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--dim)">pi</div>
+        </div>
+        <div class="row" id="call-mic" style="margin-top:14px; gap:10px; font-size:16px; color:var(--dim)">
+          <span id="mic-dot" style="width:9px;height:9px;border-radius:50%;background:var(--dim);display:inline-block"></span>
+          <span id="mic-label">mic: BlackHole 2ch</span>
+        </div>
+      </div>
+      <div style="margin-top:22px; display:flex; flex-direction:column; gap:12px">
+        <div class="row" id="flow1" style="opacity:0; gap:12px; font-size:18px"><span class="green">➜</span><span class="muted">pi's voice · into the call mic</span></div>
+        <div class="row" id="flow2" style="opacity:0; gap:12px; font-size:18px"><span class="blue">➜</span><span class="muted">room + remote · into the transcript</span></div>
+      </div>
+      <div style="margin-top:24px; display:flex; flex-direction:column; gap:9px; border-top:1px solid #26262f; padding-top:18px">
+        <div class="label" style="margin-bottom:2px">system devices</div>
+        <div class="row" id="dev1" style="opacity:0; gap:10px; font-size:17px"><span class="green">↳</span><span class="muted">input → BlackHole 2ch</span></div>
+        <div class="row" id="dev2" style="opacity:0; gap:10px; font-size:17px"><span class="green">↳</span><span class="muted">output → Pi Listens (Zoom speaker)</span></div>
+        <div class="row" id="dev3" style="opacity:0; gap:10px; font-size:17px"><span class="yellow">↳</span><span class="muted" id="dev3-txt">restored on exit</span></div>
+      </div>
+    </div>
+
+    <div style="position:absolute; left:660px; right:56px; top:110px; bottom:150px">
+      <div class="tw" style="height:150px; overflow:hidden">
+        <div class="th">live transcript · room + remote</div>
+        <div class="ln" id="cn1"></div>
+        <div class="ln" id="cn2"></div>
+        <div class="ln" id="cn3"></div>
+        <div class="ln" id="cn4"></div>
+      </div>
+      <div class="msg-user" id="conf-user" style="opacity:0; margin-top:20px"><span id="conf-user-txt"></span></div>
+      <div class="msg-ai" id="conf-ai" style="opacity:0; margin-top:16px"></div>
+    </div>
+
+
+    <div class="editor"><span class="chev">›</span><span class="txt" id="conf-editor"></span><span class="caret" id="conf-caret"></span></div>
+    <div class="footer"><span class="mode" id="conf-state">🎧 conference: off</span></div>
+  </section>
+
+  <!-- ══ 6 · voice ══ -->
+  <section class="scene" id="s-voice">
+    <div class="hdr"><div><span class="brand">pi</span> <span class="path">~/Dev/talk-to-pi</span></div>
+      <div class="right">ctrl+shift+o</div></div>
+    <div class="term" style="opacity:.25">
+      <div class="msg-ai"><div>Done — the upload retries twice with backoff now.</div></div>
+    </div>
+    <div class="card" id="voice-menu" style="position:absolute; left:430px; top:200px; width:740px; padding:24px 28px; opacity:0">
+      <div class="label" style="margin-bottom:14px">voice</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px" id="voice-grid">
+        <div class="vitem">aria</div><div class="vitem">rachel</div><div class="vitem">sarah</div>
+        <div class="vitem">adam</div><div class="vitem">antoni</div><div class="vitem">george</div>
+      </div>
+      <div class="label" style="margin:26px 0 10px">speed</div>
+      <div class="row" style="gap:10px" id="speed-row">
+        <div class="sitem">0.8×</div><div class="sitem">0.9×</div><div class="sitem">1.0×</div>
+        <div class="sitem">1.1×</div><div class="sitem">1.2×</div>
+      </div>
+      <div class="dim" style="font-size:16px; margin-top:22px">applies to pi's next sentence</div>
+    </div>
+  </section>
+
+  <!-- ══ 7 · close ══ -->
+  <section class="scene" id="s-close">
+    <div class="center">
+      <div class="logo" id="close-logo">talk<span class="t">-to-pi</span></div>
+      <div class="row" style="gap:16px; margin-top:10px" id="close-key">
+        <span class="key" style="font-size:20px; padding:8px 18px">hold <span class="k">space</span></span>
+      </div>
+      <div class="sub" id="close-repo" style="font-size:20px">github.com/bhenriq/talk-to-pi</div>
+      <div class="dim" id="close-note" style="font-size:17px">runs on the OpenRouter login you already have</div>
+    </div>
+  </section>
+</div>
+
+<style>
+  .vitem { padding: 9px 0; text-align: center; border: 1px solid var(--borderMuted);
+    border-radius: 7px; color: var(--muted); font-size: 20px; }
+  .sitem { padding: 9px 0; text-align: center; border: 1px solid var(--borderMuted);
+    border-radius: 7px; color: var(--muted); font-size: 19px; width: 100%; }
+  .vitem.sel, .sitem.sel { border-color: var(--violet); color: var(--text); background: #241f33; }
+</style>
+
+<script>
+// ── helpers ────────────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const ease = (t) => 1 - Math.pow(1 - clamp(t), 3);
+/** 0→1 fade between t0 and t1 */
+const fade = (t, t0, t1) => ease((t - t0) / Math.max(1e-6, t1 - t0));
+const setO = (el, v) => { if (el) el.style.opacity = String(v); };
+/** typewriter: first `cps * (t - t0)` characters */
+const typed = (full, t, t0, cps) => full.slice(0, Math.max(0, Math.floor((t - t0) * cps)));
+
+const TL = window.TL;
+const at = (name) => TL.scenes.find((s) => s.id === name).start;
+
+// ── fixed content ──────────────────────────────────────────────────────────
+const HOOK_TEXT = "reword the pricing section and read it back to me";
+const TALK_USER = "add a retry to the upload call, then tell me what changed";
+const LISTEN_LINES = [
+  ["10:02", "Speaker 1", "pricing is still the blocker for the enterprise tier"],
+  ["10:04", "Speaker 2", "we could cap it at twenty five seats per team"],
+  ["10:07", "You", "let's revisit that after the Q3 launch"],
+  ["10:09", "Speaker 1", "agreed, I'll update the sheet before friday"],
+  ["10:12", "Speaker 2", "and legal wants the new terms reviewed"],
+];
+const LISTEN_USER = "what did we decide about pricing?";
+const LISTEN_AI = "Nothing final: capping at 25 seats was proposed, and the decision was deferred until after the Q3 launch.";
+const CONF_LINES = [
+  ["10:04", "Sam", "can pi summarise the RFC before we start?"],
+  ["10:05", "You", "sure, one second"],
+  ["10:06", "pi", "The RFC proposes one flag rather than two."],
+];
+const CONF_USER = "summarise the rfc in one line";
+const CONF_AI = "One flag, default off, no migration needed.";
+
+// waveform bars
+const WAVE_N = 26;
+const waveEl = $("talk-wave");
+for (let i = 0; i < WAVE_N; i++) waveEl.appendChild(document.createElement("i"));
+
+function renderWave(t, amp) {
+  const bars = waveEl.children;
+  waveEl.style.opacity = amp > 0.01 ? "1" : "0";
+  for (let i = 0; i < WAVE_N; i++) {
+    const ph = i * 0.55;
+    const v = Math.sin(t * 9 + ph) * 0.5 + Math.sin(t * 4.3 + ph * 1.7) * 0.5;
+    const h = clamp(4 + Math.abs(v) * amp * 22, 4, 28);
+    bars[i].style.height = h.toFixed(1) + "px";
+  }
+}
+
+function setSentences(t, schedule) {
+  // schedule: [[el, t0, t1, baseColor], ...] — highlight while "spoken"
+  for (const [el, t0, t1] of schedule) {
+    const el2 = typeof el === "string" ? $(el) : el;
+    if (t < t0) { el2.style.opacity = "0"; continue; }
+    el2.style.opacity = "1";
+    const spoken = t >= t0 && t < t1;
+    el2.style.background = spoken ? "rgba(167,153,210,0.22)" : "transparent";
+    el2.style.boxShadow = spoken ? "inset 0 -2px 0 rgba(167,153,210,0.75)" : "none";
+  }
+}
+
+// ── scenes ─────────────────────────────────────────────────────────────────
+function renderHook(t, s0) {
+  const sc = $("s-hook");
+  setO(sc, fade(t, s0 - 0.4, s0 + 0.1) * (1 - fade(t, at("shift") - 0.35, at("shift"))));
+  if (t < s0 - 0.5 || t > at("shift")) return;
+  const rel = t - s0;
+  $("hook-typed").textContent = typed(HOOK_TEXT, rel, 0.4, 9);
+  const blink = (Math.floor(t * 2.2) % 2 === 0) ? 1 : 0;
+  $("hook-caret").style.opacity = String(blink);
+  $("hook-caret2").style.opacity = String(blink);
+  const a = fade(rel, 1.0, 1.7), b = fade(rel, 1.9, 2.6);
+  setO($("hook-a"), a); setO($("hook-b"), b);
+  $("hook-bar-a").style.width = lerp(30, 120, a).toFixed(0) + "px";
+  $("hook-bar-b").style.width = lerp(30, 450, b).toFixed(0) + "px";
+}
+
+function renderShift(t, s0) {
+  const sc = $("s-shift");
+  const vis = fade(t, s0 - 0.3, s0 + 0.15) * (1 - fade(t, at("talk") - 0.4, at("talk")));
+  setO(sc, vis);
+  if (vis <= 0.001) return;
+  const rel = t - s0;
+  setO($("shift-logo"), fade(rel, -0.3, 0.4));
+  $("shift-logo").style.transform = `translateY(${lerp(18, 0, fade(rel, -0.3, 0.5))}px)`;
+  setO($("shift-sub"), fade(rel, 0.4, 1.0));
+  ["chip1", "chip2", "chip3"].forEach((id, i) => {
+    const v = fade(rel, 1.0 + i * 0.45, 1.5 + i * 0.45);
+    setO($(id), v);
+    $(id).style.transform = `translateY(${lerp(14, 0, v)}px)`;
+  });
+}
+
+function renderTalk(t, s0) {
+  const sc = $("s-talk");
+  const end = at("listen");
+  const vis = fade(t, s0 - 0.3, s0 + 0.15) * (1 - fade(t, end - 0.4, end));
+  setO(sc, vis);
+  if (vis <= 0.001) return;
+  const rel = t - s0;
+
+  // stages (seconds after scene start)
+  const T_HOLD = 0.7, T_REL = 3.6, T_STT = 4.9, T_THINK = 7.0, T_AI = 8.6,
+        T_BARGE = 15.2, T_ESC = 18.0;
+
+  const listening = rel >= T_HOLD && rel < T_REL;
+  const transcribing = rel >= T_REL && rel < T_STT;
+  const thinking = rel >= T_STT + 0.6 && rel < T_AI;
+  const speaking = rel >= T_AI && rel < T_BARGE;
+  const listening2 = rel >= T_BARGE + 0.5 && rel < T_ESC;
+
+  // user message
+  const uvis = rel >= T_STT ? 1 : 0;
+  setO($("talk-user"), uvis);
+  $("talk-user-txt").textContent = typed(TALK_USER, rel, T_STT, 60);
+
+  // assistant text
+  setO($("talk-ai"), rel >= T_AI ? 1 : 0);
+  const B = T_BARGE - 0.35; // speech cut
+  setSentences(rel, [
+    ["say1", T_AI, Math.min(T_AI + 2.6, B)],
+    ["say2", T_AI + 2.8, Math.min(T_AI + 6.0, B)],
+    ["say3", T_AI + 6.2, B],
+  ]);
+  setO($("talk-tool"), fade(rel, T_AI + 0.5, T_AI + 0.9));
+
+  // truncated mid-sentence when barged in: dim the sentence that was cut
+  if (rel >= B) {
+    const s3 = $("say3");
+    if (rel >= B) s3.style.opacity = "0.35";
+    if (rel >= B) $("say2").style.opacity = "1";
+  }
+
+  // keycaps — visible from the start so the mechanic is clear while pi records
+  setO($("talk-keys"), fade(rel, 0.3, 0.8));
+  $("k-space").className = "key" + (listening || speaking ? " on" : "");
+  $("k-esc").className = "key" + (rel >= T_ESC ? " on" : "");
+
+  // footer state
+  let label = "🎙 talk: idle", amp = 0;
+  if (listening || listening2) { label = "🎙 listening"; amp = 1; }
+  else if (transcribing) label = "🎙 transcribing…";
+  else if (thinking) label = "🧠 thinking";
+  else if (speaking) label = "🔊 speaking";
+  else if (rel >= T_ESC) label = "🎙 talk: idle";
+  $("talk-state").textContent = label;
+
+  // the wait window animates the wave too (transcribing/thinking)
+  if (transcribing || thinking) amp = 0.45;
+  renderWave(t, amp * (rel >= T_ESC ? 0 : 1));
+}
+
+function renderListen(t, s0) {
+  const sc = $("s-listen");
+  const end = at("conference");
+  const vis = fade(t, s0 - 0.3, s0 + 0.15) * (1 - fade(t, end - 0.4, end));
+  setO(sc, vis);
+  if (vis <= 0.001) return;
+  const rel = t - s0;
+
+  const STREAM = 0.6;      // lines begin
+  const STEP = 1.3;
+  const T_TYPE = 6.4;      // question typed into the editor
+  const T_ASK = 8.4;
+  const T_ANS = 9.8;
+  const T_STOP = 14.2;
+
+  for (let i = 0; i < LISTEN_LINES.length; i++) {
+    const [ts, who, text] = LISTEN_LINES[i];
+    const ln = $("ln" + (i + 1));
+    const t0 = STREAM + i * STEP;
+    if (rel < t0) { ln.innerHTML = ""; continue; }
+    const shown = typed(text, rel, t0, 55);
+    ln.innerHTML = `<span class="dim">${ts}</span> <b>${who}</b> ${shown}`;
+  }
+
+  // the question is typed in the editor, then submitted as a message
+  $("listen-editor").textContent = rel >= T_TYPE && rel < T_ASK ? typed(LISTEN_USER, rel, T_TYPE, 26) : "";
+  setO($("listen-user"), rel >= T_ASK ? 1 : 0);
+  $("listen-user-txt").textContent = LISTEN_USER;
+
+  setO($("listen-ai"), rel >= T_ANS ? 1 : 0);
+  $("listen-ai-txt").textContent = typed(LISTEN_AI, rel, T_ANS, 62);
+  setO($("listen-cite"), fade(rel, T_ANS + 1.6, T_ANS + 2.1));
+
+  const save = fade(rel, T_STOP + 0.9, T_STOP + 1.5);
+  setO($("listen-save"), save);
+  $("listen-save").style.transform = `translateY(${lerp(12, 0, save)}px)`;
+
+  const segs = clamp(Math.floor((rel - STREAM) / STEP) + 1, 0, LISTEN_LINES.length);
+  $("listen-state").textContent = rel >= T_STOP
+    ? `📝 listen: stopped · ${segs} segments`
+    : `📝 listen: recording · ${segs} segments`;
+
+  $("listen-caret").style.opacity = String(Math.floor(t * 2.2) % 2 === 0 ? 1 : 0);
+}
+
+function renderConf(t, s0) {
+  const sc = $("s-conf");
+  const end = at("voice");
+  const vis = fade(t, s0 - 0.3, s0 + 0.15) * (1 - fade(t, end - 0.4, end));
+  setO(sc, vis);
+  if (vis <= 0.001) return;
+  const rel = t - s0;
+
+  const T_ON = 0.8, T_DEV = 2.6, T_FLOW = 4.4, T_PI = 5.4, T_OFF = 13.4;
+
+  // device chips
+  setO($("dev1"), fade(rel, T_DEV, T_DEV + 0.5));
+  setO($("dev2"), fade(rel, T_DEV + 0.35, T_DEV + 0.85));
+  const back = fade(rel, T_OFF + 0.3, T_OFF + 0.8);
+  setO($("dev3"), back);
+  $("dev3-txt").textContent = "restored: MacBook Pro Microphone · OpenSwim Pro";
+
+  // the two audio paths
+  const fadeOut = 1 - fade(rel, T_OFF, T_OFF + 0.4);
+  setO($("flow1"), fade(rel, T_FLOW, T_FLOW + 0.4) * fadeOut);
+  setO($("flow2"), fade(rel, T_FLOW + 0.5, T_FLOW + 0.9) * fadeOut);
+
+  // mic live
+  const live = rel >= T_ON && rel < T_OFF;
+  $("mic-dot").style.background = live ? "var(--green)" : "var(--dim)";
+  $("mic-label").textContent = live ? "mic: BlackHole 2ch · live" : "mic: BlackHole 2ch";
+  $("tile-pi").style.background = (live && rel >= T_PI) ? "#26333d" : "#22222b";
+
+  // transcript lines from the call
+  for (let i = 0; i < CONF_LINES.length; i++) {
+    const [ts, who, text] = CONF_LINES[i];
+    const ln = $("cn" + (i + 1));
+    const t0 = 1.6 + i * 1.9;
+    if (rel < t0) { ln.innerHTML = ""; continue; }
+    ln.innerHTML = `<span class="dim">${ts}</span> <b>${who}</b> ${typed(text, rel, t0, 55)}`;
+  }
+
+  const T_TYPE = 3.6, T_ASK = 5.6;
+  $("conf-editor").textContent = rel >= T_TYPE && rel < T_ASK ? typed(CONF_USER, rel, T_TYPE, 26) : "";
+  setO($("conf-user"), rel >= T_ASK ? 1 : 0);
+  $("conf-user-txt").textContent = CONF_USER;
+  setO($("conf-ai"), rel >= T_ASK + 1.4 ? 1 : 0);
+  $("conf-ai").textContent = typed(CONF_AI, rel, T_ASK + 1.4, 50);
+
+  $("conf-state").textContent = rel >= T_OFF ? "🎧 conference: off" : "🎧 conference: on · devices switched";
+}
+
+function renderVoice(t, s0) {
+  const sc = $("s-voice");
+  const end = at("close");
+  const vis = fade(t, s0 - 0.3, s0 + 0.15) * (1 - fade(t, end - 0.4, end));
+  setO(sc, vis);
+  if (vis <= 0.001) return;
+  const rel = t - s0;
+  setO($("voice-menu"), fade(rel, 0.2, 0.7));
+  $("voice-menu").style.transform = `translateY(${lerp(16, 0, fade(rel, 0.2, 0.8))}px)`;
+
+  const items = [...document.querySelectorAll(".vitem")];
+  const speeds = [...document.querySelectorAll(".sitem")];
+  const voiceSel = rel >= 1.4 ? 1 : -1;         // rachel
+  const speedSel = rel >= 3.0 ? 4 : -1;         // 1.2x
+  items.forEach((el, i) => el.className = "vitem" + (i === voiceSel ? " sel" : ""));
+  speeds.forEach((el, i) => el.className = "sitem" + (i === speedSel ? " sel" : (i === (speedSel < 0 ? 2 : -1) ? " sel" : "")));
+}
+
+function renderClose(t, s0) {
+  const sc = $("s-close");
+  setO(sc, fade(t, s0 - 0.3, s0 + 0.2));
+  const rel = t - s0;
+  setO($("close-logo"), fade(rel, -0.2, 0.4));
+  setO($("close-key"), fade(rel, 0.5, 1.0));
+  setO($("close-repo"), fade(rel, 1.0, 1.5));
+  setO($("close-note"), fade(rel, 1.4, 1.9));
+}
+
+// ── seek: pure function of time ────────────────────────────────────────────
+window.seek = function seek(t) {
+  if (t < at("hook") - 1) {
+    ["s-hook", "s-shift", "s-talk", "s-listen", "s-conf", "s-voice", "s-close"].forEach((id) => setO($(id), 0));
+    return;
+  }
+  renderHook(t, at("hook"));
+  renderShift(t, at("shift"));
+  renderTalk(t, at("talk"));
+  renderListen(t, at("listen"));
+  renderConf(t, at("conference"));
+  renderVoice(t, at("voice"));
+  renderClose(t, at("close"));
+};
+
+// `?t=12.5` renders a single still — used for visual QA without a capture run.
+const qt = new URLSearchParams(location.search).get("t");
+window.seek(qt ? Number(qt) : 0);
+document.title = "ready";
+</script>
+</body>
+</html>

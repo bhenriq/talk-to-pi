@@ -2,6 +2,10 @@
 
 A pi extension that adds a **`/talk`** voice mode: hold space to talk, pi answers out loud.
 
+[![explainer video](video/poster.png)](video/talk-to-pi.mp4)
+
+*▶ [83-second explainer](video/talk-to-pi.mp4) — same voice the extension speaks with.*
+
 - **Hold `space`** → pi records your voice (`sox` → OpenRouter `input_audio` STT).
 - **Release** → pi transcribes and auto-submits it as your message.
 - **Esc** → stop pi talking and abort the run (or cancel an in-progress recording). Esc never exits a mode.
@@ -36,6 +40,22 @@ Restart pi (or run `/reload`), then type `/talk`.
 | **Esc** | while pi is working/speaking | stop audio + abort the run |
 | **Esc** | idle | does nothing (never exits a mode) |
 | `/talk` | any time | toggle talk mode |
+
+## Demo video
+
+The 83-second explainer lives in [`video/`](video/talk-to-pi.mp4). Everything is regenerated
+from source — no screen recording:
+
+```sh
+node video/tts.mjs     # narrate each scene, measure it → video/build/timeline.json
+node video/theme.mjs   # pi's real dark theme → video/build/theme.css
+node video/build.mjs   # render every frame from the page clock, mux with ffmpeg
+```
+
+- [`video/script.md`](video/script.md) — the script and shot list
+- [`video/scene.html`](video/scene.html) — animated mockup; `seek(t)` is a pure function of time,
+  so frames are captured deterministically and never drift from the narration
+- `video/build.mjs` captures frames over CDP at 12 fps and lays the narration on the same offsets
 
 While talk mode is on, `space` is reserved for recording (it is never inserted into the
 editor); all other keys behave normally.
