@@ -2,6 +2,26 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+export async function openRouterChat(model: string, system: string, userText: string, maxTokens = 600): Promise<string> {
+  const token = readOpenRouterToken();
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model,
+      messages: [
+        ...(system ? [{ role: "system", content: system }] : []),
+        { role: "user", content: userText },
+      ],
+      max_tokens: maxTokens,
+      temperature: 0.3,
+    }),
+  });
+  const json: any = await res.json();
+  if (!res.ok) throw new Error(json?.error?.message || `OpenRouter ${res.status}`);
+  return String(json?.choices?.[0]?.message?.content ?? "").trim();
+}
+
 /** Read the OpenRouter OAuth access token from ~/.pi/agent/auth.json. */
 export function readOpenRouterToken(): string {
   const p = join(homedir(), ".pi", "agent", "auth.json");

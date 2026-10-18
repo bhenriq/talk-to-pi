@@ -1,6 +1,9 @@
 // talk-to-pi — hold space to talk, pi answers out loud.
 // See SPEC.md for the full behaviour contract.
 
+import { existsSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { matchesKey } from "@earendil-works/pi-tui";
@@ -8,6 +11,9 @@ import { BusyAudio } from "./src/busy-audio.ts";
 import { loadConfig } from "./src/config.ts";
 import { Listener } from "./src/listen.ts";
 import { Recorder } from "./src/recorder.ts";
+import { Relay } from "./src/relay.ts";
+import { summarizeMeeting } from "./src/summary.ts";
+import { getDefaultDevice, setDefaultDevice } from "./src/system-audio.ts";
 import { Speaker } from "./src/speaker.ts";
 import { SpeechStream } from "./src/speech-stream.ts";
 import { clearStatus, refreshStatus, resetState, setBusyAudio, state } from "./src/state.ts";
@@ -39,9 +45,15 @@ export default function (pi: ExtensionAPI) {
   setBusyAudio((active) => busyAudio.setActive(active));
   const speech = new SpeechStream();
   const listener = new Listener(cfg);
+  speaker.onSpeak = (text) => {
+    if (state.listenRecording) listener.addPiLine(text);
+  };
+  const relay = new Relay(cfg);
   let recorder: Recorder | null = null;
   let terminalUnsub: (() => void) | null = null;
   let lastReleaseAt = 0;
+  let prevInputDevice: string | null = null;
+  let prevOutputDevice: string | null = null;
 
   function setEnabled(on: boolean, ctx: ExtensionContext) {
     state.ctx = ctx;
@@ -101,9 +113,14 @@ export default function (pi: ExtensionAPI) {
   }
 
   function onTerminalInput(data: string): { consume?: boolean; data?: string } | undefined {
+    // Conference toggle.
+    if (matchesKey(data, cfg.input.conferenceShortcut)) {
+      if (state.ctx) void toggleConference(state.ctx);
+      return { consume: true };
+    }
     // Listen toggle works regardless of talk mode.
     if (matchesKey(data, cfg.input.listenShortcut)) {
-      if (state.ctx) toggleListen(state.ctx);
+      if (state.ctx) void toggleListen(state.ctx);
       return { consume: true };
     }
     // Talk toggle.
@@ -158,7 +175,44 @@ export default function (pi: ExtensionAPI) {
     state.ctx = ctx;
   }
 
-  function toggleListen(ctx: ExtensionContext) {
+  async function offerSaveTranscript(ctx: ExtensionContext) {
+    const transcript = listener.transcriptText.trim();
+    if (!transcript) return;
+    const want = await ctx.ui.confirm(
+      "Save meeting transcript?",
+      `${listener.chunkCount} segments recorded. Save as Markdown with a summary at the top?`,
+    );
+    const rawPath = listener.filePath;
+    if (!want) {
+      ctx.ui.notify(`Raw transcript kept at ${rawPath}`, "info");
+      return;
+    }
+    ctx.ui.notify("Summarizing meeting…", "info");
+    try {
+      const { slug, summary } = await summarizeMeeting(cfg, transcript);
+      const dir = cfg.listen.outputDir.startsWith("~")
+        ? join(homedir(), cfg.listen.outputDir.slice(1))
+        : cfg.listen.outputDir;
+      const date = new Date(listener.startTime || Date.now()).toISOString().slice(0, 10);
+      let file = join(dir, `${date}-${slug}.md`);
+      let i = 1;
+      while (existsSync(file)) file = join(dir, `${date}-${slug}-${i++}.md`);
+      writeFileSync(file, `# Meeting — ${slug}\n\n## Summary\n${summary}\n\n## Transcript\n${transcript}\n`);
+      if (rawPath && rawPath !== file) {
+        try {
+          rmSync(rawPath, { force: true });
+        } catch {
+          // keep the raw copy if it cannot be removed
+        }
+      }
+      ctx.ui.notify(`Transcript saved to ${file}`, "info");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      ctx.ui.notify(`Could not summarize (${msg}); raw transcript kept at ${rawPath}`, "warning");
+    }
+  }
+
+  async function toggleListen(ctx: ExtensionContext) {
     if (ctx.mode !== "tui") {
       ctx.ui.notify("Listen mode requires the interactive terminal", "error");
       return;
@@ -170,12 +224,65 @@ export default function (pi: ExtensionAPI) {
       state.listenChunks = 0;
       refreshStatus();
       ctx.ui.notify(`Listening stopped — ${listener.chunkCount} segments transcribed`, "info");
-      ctx.ui.notify(`Transcript saved to ${listener.filePath}`, "info");
+      await offerSaveTranscript(ctx);
     } else {
       listener.start();
       state.listenRecording = true;
       refreshStatus();
       ctx.ui.notify("Listening started — transcribing the microphone", "info");
+      if (state.conference) {
+        ctx.ui.notify("Remote meeting audio is also being transcribed", "info");
+        listener.setRemoteTap(cfg.conference.remoteTap);
+      }
+    }
+  }
+
+  async function restoreSystemDevices(ctx?: ExtensionContext) {
+    try {
+      if (prevOutputDevice) {
+        await setDefaultDevice(pi, "output", prevOutputDevice);
+        prevOutputDevice = null;
+      }
+      if (prevInputDevice) {
+        await setDefaultDevice(pi, "input", prevInputDevice);
+        prevInputDevice = null;
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      ctx?.ui.notify(`Failed to restore system audio: ${msg}`, "warning");
+    }
+  }
+
+  async function toggleConference(ctx: ExtensionContext) {
+    if (ctx.mode !== "tui") {
+      ctx.ui.notify("Conference mode requires the interactive terminal", "error");
+      return;
+    }
+    attach(ctx);
+    state.conference = !state.conference;
+    if (state.conference) {
+      if (cfg.conference.relayMic) relay.start();
+      listener.setRemoteTap(cfg.conference.remoteTap);
+      refreshStatus();
+      ctx.ui.notify("Conference mode on — pi's voice goes to you + the room", "info");
+      if (cfg.conference.switchSystemDevices) {
+        try {
+          prevInputDevice = await getDefaultDevice(pi, "input");
+          prevOutputDevice = await getDefaultDevice(pi, "output");
+          await setDefaultDevice(pi, "input", cfg.conference.systemInputDevice);
+          await setDefaultDevice(pi, "output", cfg.conference.systemOutputDevice);
+          ctx.ui.notify("System audio switched for the call", "info");
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          ctx.ui.notify(`System audio switch failed: ${msg}`, "warning");
+        }
+      }
+    } else {
+      await restoreSystemDevices(ctx);
+      relay.stop();
+      listener.setRemoteTap(false);
+      refreshStatus();
+      ctx.ui.notify("Conference mode off", "info");
     }
   }
 
@@ -193,7 +300,16 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerCommand("listen", {
     description: "Start/stop recording the mic and transcribing it into context",
-    handler: async (_args, ctx) => toggleListen(ctx),
+    handler: async (_args, ctx) => {
+      await toggleListen(ctx);
+    },
+  });
+
+  pi.registerCommand("conference", {
+    description: "Route pi's voice to you and the meeting (Zoom mic = BlackHole)",
+    handler: async (_args, ctx) => {
+      await toggleConference(ctx);
+    },
   });
 
   // ── Listen transcript tool ─────────────────────────────────────────────────
@@ -218,6 +334,7 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", (_ev, ctx) => {
     attach(ctx);
     listener.reset();
+    relay.stop();
     resetState();
     lastReleaseAt = 0;
     recorder?.cancel();
@@ -231,11 +348,13 @@ export default function (pi: ExtensionAPI) {
     refreshStatus();
   });
 
-  pi.on("session_shutdown", () => {
+  pi.on("session_shutdown", async () => {
     recorder?.cancel();
     recorder = null;
     speaker.stop();
     listener.reset();
+    relay.stop();
+    await restoreSystemDevices();
     terminalUnsub?.();
     terminalUnsub = null;
     clearStatus();
@@ -300,7 +419,7 @@ export default function (pi: ExtensionAPI) {
         "A meeting is being (or was recently) recorded and transcribed from the microphone. " +
         "The most recent transcript follows (HH:MM:SS per line, oldest first). Use it to answer questions about " +
         "the meeting; for anything older than what is shown, call the listen_transcript tool.\n\n" +
-        listener.recent(cfg.listener.contextWindowChars);
+        listener.recent(cfg.listen.contextWindowChars);
     }
   });
 }

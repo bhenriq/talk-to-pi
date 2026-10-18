@@ -51,7 +51,7 @@ export class Recorder {
         "sox",
         [
           "-q",
-          "-d",
+          "-t", "coreaudio", this.cfg.input.micDevice,
           "-r",
           String(this.cfg.stt.sampleRate),
           "-c",

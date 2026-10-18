@@ -56,18 +56,60 @@ export function pcmWindowRms(pcm: Buffer, sampleRate: number, windowSeconds = 0.
   return max;
 }
 
-/**
- * Continuous listen recorder: captures the mic with sox (raw PCM on stdout),
- * slices it into fixed-length chunks, transcribes each via OpenRouter
- * `/api/v1/audio/transcriptions`, and appends the result to a Markdown file.
- */
-export class Listener {
+/** One capture stream (mic or remote tap), sliced into fixed-size PCM chunks. */
+class CaptureSource {
   private proc: ChildProcessWithoutNullStreams | null = null;
   private pcm = Buffer.alloc(0);
+
+  constructor(
+    private bytesPerChunk: number,
+    private onChunk: (pcm: Buffer) => void,
+    private onError: (msg: string) => void,
+    readonly isRemote: boolean,
+  ) {}
+
+  start(command: string, args: string[]) {
+    this.proc = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+    this.proc.stdout.on("data", (d: Buffer) => this.ingest(d));
+    this.proc.stderr.on("data", () => {});
+    this.proc.on("error", (err) => {
+      this.proc = null;
+      this.onError(err.message);
+    });
+    this.proc.on("exit", () => {
+      this.proc = null;
+    });
+  }
+
+  stop() {
+    if (this.proc) {
+      this.proc.kill("SIGTERM");
+      this.proc = null;
+    }
+    this.pcm = Buffer.alloc(0);
+  }
+
+  private ingest(data: Buffer) {
+    this.pcm = Buffer.concat([this.pcm, data]);
+    while (this.pcm.length >= this.bytesPerChunk) {
+      const chunk = this.pcm.subarray(0, this.bytesPerChunk);
+      this.pcm = this.pcm.subarray(this.bytesPerChunk);
+      this.onChunk(chunk);
+    }
+  }
+}
+
+/**
+ * Continuous listen recorder: captures one or two sources (mic, and optionally a
+ * tap of remote meeting audio), slices each into fixed-length chunks, transcribes
+ * via OpenRouter `/api/v1/audio/transcriptions`, and appends to a Markdown file.
+ */
+export class Listener {
+  private sources: CaptureSource[] = [];
   private bytesPerChunk: number;
   private queue: Promise<void> = Promise.resolve();
   private lines: Array<{ t: string; text: string }> = [];
-  private seconds = 0;
+  private startAt = 0;
 
   filePath = "";
   chunkCount = 0;
@@ -81,38 +123,63 @@ export class Listener {
     return this.lines.map((l) => `[${l.t}] ${l.text}`).join("\n");
   }
 
+  get startTime(): number {
+    return this.startAt;
+  }
+
   start() {
-    if (this.proc) return;
+    if (this.sources.length > 0) return;
     this.lines = [];
-    this.seconds = 0;
     this.chunkCount = 0;
-    this.pcm = Buffer.alloc(0);
+    this.startAt = Date.now();
 
     const dir = this.resolveDir();
     mkdirSync(dir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     this.filePath = join(dir, `listen-${stamp}.md`);
     writeFileSync(this.filePath, `# Listen transcript — ${new Date().toLocaleString()}\n\n`);
-    this.refreshWidget();
 
+    this.addSource(false); // mic
+    if (this.cfg.conference.remoteTap && state.conference) this.addSource(true); // remote tap
+
+    this.refreshWidget();
+  }
+
+  /** Add or remove the remote tap (called when conference mode toggles). */
+  setRemoteTap(active: boolean) {
+    if (this.sources.length === 0) return; // not listening
+    const hasRemote = this.sources.some((s) => s.isRemote);
+    if (active && !hasRemote) {
+      this.addSource(true);
+    } else if (!active && hasRemote) {
+      for (const s of this.sources.filter((s) => s.isRemote)) s.stop();
+      this.sources = this.sources.filter((s) => !s.isRemote);
+    }
+  }
+
+  private addSource(remote: boolean) {
     const m = this.cfg.listen;
-    this.proc = spawn("sox", [
-      "-q", "-d",
-      "-r", String(m.sampleRate),
-      "-c", String(m.channels),
-      "-b", String(m.bits),
-      "-e", "signed-integer",
-      "-t", "raw", "-",
-    ]);
-    this.proc.stdout.on("data", (d: Buffer) => this.onPcm(d));
-    this.proc.stderr.on("data", () => {});
-    this.proc.on("error", (err) => {
-      this.proc = null;
-      state.ctx?.ui.notify(`Listen recording failed: ${err.message}`, "error");
-    });
-    this.proc.on("exit", () => {
-      this.proc = null;
-    });
+    const src = new CaptureSource(
+      this.bytesPerChunk,
+      (pcm) => this.handleChunk(pcm),
+      (msg) => state.ctx?.ui.notify(`Listen recording failed: ${msg}`, "error"),
+      remote,
+    );
+    const base = (command: string, args: string[]) => src.start(command, args);
+    if (remote) {
+      base("sox", [
+        "-q", "-t", "coreaudio", this.cfg.conference.remoteTapDevice,
+        "-t", "raw", "-r", String(m.sampleRate), "-c", String(m.channels), "-b", String(m.bits),
+        "-e", "signed-integer", "-", "remix", "-m", "1", "2",
+      ]);
+    } else {
+      base("sox", [
+        "-q", "-t", "coreaudio", this.cfg.input.micDevice,
+        "-r", String(m.sampleRate), "-c", String(m.channels), "-b", String(m.bits),
+        "-e", "signed-integer", "-t", "raw", "-",
+      ]);
+    }
+    this.sources.push(src);
   }
 
   private resolveDir(): string {
@@ -120,22 +187,11 @@ export class Listener {
     return d.startsWith("~") ? join(homedir(), d.slice(1)) : d;
   }
 
-  /** Feed raw PCM bytes (called by the sox stdout handler; testable directly). */
-  onPcm(data: Buffer) {
-    this.pcm = Buffer.concat([this.pcm, data]);
-    while (this.pcm.length >= this.bytesPerChunk) {
-      const chunk = this.pcm.subarray(0, this.bytesPerChunk);
-      this.pcm = this.pcm.subarray(this.bytesPerChunk);
-      this.handleChunk(chunk);
-    }
-  }
-
   private handleChunk(pcm: Buffer) {
-    this.seconds += this.cfg.listen.chunkSeconds;
+    const t = this.formatTime((Date.now() - this.startAt) / 1000);
     if (this.cfg.listen.skipSilence && pcmWindowRms(pcm, this.cfg.listen.sampleRate) < this.cfg.listen.silenceThreshold) {
       return; // genuinely silent: no 100 ms window has energy
     }
-    const t = this.formatTime(this.seconds);
     const wav = Buffer.concat([
       wavHeader(pcm.length, this.cfg.listen.sampleRate, this.cfg.listen.channels, this.cfg.listen.bits),
       pcm,
@@ -145,7 +201,7 @@ export class Listener {
 
   private async transcribe(wav: Buffer, t: string) {
     try {
-      const json: any = await this.transcribeRequest(wav, t);
+      const json: any = await this.transcribeRequest(wav);
       if (!json) return; // dropped after retries
       if (json.errorStatus) {
         state.ctx?.ui.notify(`Listen transcription failed: ${json.errorStatus}`, "error");
@@ -170,7 +226,7 @@ export class Listener {
   }
 
   /** POST to /audio/transcriptions, with one retry on failure. */
-  private async transcribeRequest(wav: Buffer, t: string): Promise<any | null> {
+  private async transcribeRequest(wav: Buffer): Promise<any | null> {
     let attempt = 0;
     for (;;) {
       attempt++;
@@ -204,11 +260,8 @@ export class Listener {
   }
 
   stop() {
-    if (this.proc) {
-      this.proc.kill("SIGTERM");
-      this.proc = null;
-    }
-    this.pcm = Buffer.alloc(0);
+    for (const s of this.sources) s.stop();
+    this.sources = [];
     this.refreshWidget();
   }
 
@@ -216,7 +269,6 @@ export class Listener {
   reset() {
     this.stop();
     this.lines = [];
-    this.seconds = 0;
     this.chunkCount = 0;
     this.clearWidget();
   }
@@ -225,16 +277,32 @@ export class Listener {
     state.ctx?.ui.setWidget("talk-to-pi-listen", undefined);
   }
 
-  /** Show the most recent transcript lines in a widget above the editor. */
+  /** Show only the recent transcript lines (status bar is the listening indicator). */
   refreshWidget() {
     const ui = state.ctx?.ui;
     if (!ui) return;
     const max = Math.min(10, Math.max(1, this.cfg.listen.widgetLines));
     const lines = this.lines.slice(-max).map((l) => `[${l.t}] ${l.text}`);
-    const header = this.proc ? "📝 listen transcript — live" : "📝 listen transcript — stopped";
-    ui.setWidget("talk-to-pi-listen", [header, ...(lines.length ? lines : ["(listening…)"])], {
-      placement: "aboveEditor",
-    });
+    if (lines.length === 0) {
+      ui.setWidget("talk-to-pi-listen", undefined);
+      return;
+    }
+    ui.setWidget("talk-to-pi-listen", lines, { placement: "aboveEditor" });
+  }
+
+  /** Append pi's spoken sentence to the transcript (the speaker is known exactly). */
+  addPiLine(text: string) {
+    if (!this.filePath) return; // no active transcript file
+    const line = text.trim();
+    if (!line) return;
+    const t = this.formatTime((Date.now() - this.startAt) / 1000);
+    this.lines.push({ t, text: `pi: ${line}` });
+    try {
+      appendFileSync(this.filePath, `[${t}] pi: ${line}\n`);
+    } catch {
+      // persistence is best-effort
+    }
+    this.refreshWidget();
   }
 
   /** Search the transcript; empty query returns the most recent lines. */
@@ -262,10 +330,11 @@ export class Listener {
   }
 
   private formatTime(totalSeconds: number): string {
-    const h = Math.floor(totalSeconds / 3600);
-    const m = Math.floor((totalSeconds % 3600) / 60);
-    const s = Math.floor(totalSeconds % 60);
+    const s = Math.max(0, Math.floor(totalSeconds));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
     const pad = (n: number) => String(n).padStart(2, "0");
-    return `${pad(h)}:${pad(m)}:${pad(s)}`;
+    return `${pad(h)}:${pad(m)}:${pad(sec)}`;
   }
 }

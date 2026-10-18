@@ -29,6 +29,7 @@ Restart pi (or run `/reload`), then type `/talk`.
 | **space** | while pi is speaking | interrupt + start recording (barge-in) |
 | `ctrl+shift+t` | any time | toggle `/talk` |
 | `ctrl+shift+l` | any time | toggle `/listen` |
+| `ctrl+shift+c` | any time | toggle `/conference` |
 | **release** | recording | stop, transcribe, submit |
 | **Esc** | recording | cancel recording |
 | **Esc** | while pi is working/speaking | stop audio + abort the run |
@@ -55,16 +56,51 @@ The running transcript is appended to a Markdown file and made available to pi:
 - the **most recent part** is injected into the system prompt on every turn, and
 - the **`listen_transcript` tool** lets pi search the whole transcript for older content.
 
+While listening, pi's own spoken answers are appended too, labeled `pi:` — pi is the only
+identified speaker (everyone else is unlabeled).
+
 `/listen` (or `ctrl+shift+l`) toggles recording; the footer shows `📝 listen: recording · N segments`.
-The last few transcript lines also stream live in a widget above the editor as it unfolds.
-Transcripts persist to `~/.pi/listen/` (configurable).
+The most recent transcript lines stream in a widget above the editor.
+
+When you **stop** `/listen`, pi offers to save a finalized Markdown file: an LLM-written
+summary at the top, and a filename like `2026-10-18-q3-launch-plan.md` (date + a slug
+summarizing the meeting). Declining keeps the raw transcript file. Output dir: `~/.pi/listen/`.
+
+## Conference mode
+
+`/conference` (or `ctrl+shift+c`) lets pi join your Zoom/Meet call.
+
+While it's on, the extension also flips the **system default input/output** to
+`BlackHole 2ch` / `Pi Listens (Zoom speaker)` and restores your previous devices when you
+toggle off — so a call app set to "same as system" follows automatically (no per-app settings).
+
+- **pi speaks → you and the room.** pi's TTS is played into a Multi-Output device
+  (your headphones + BlackHole 2ch), so you hear it and the room hears it through Zoom's
+  microphone.
+- **room hears you too.** your microphone is relayed into BlackHole (since you never talk at
+  the same time as pi, no mixer is needed).
+- **`/listen` hears everyone.** while conference mode is on, `/listen` also transcribes the
+  remote meeting audio (tapped from BlackHole 16ch) alongside your mic.
+- the busy blip is silenced while conference mode is on.
+
+**One-time setup:**
+
+```sh
+brew install --cask blackhole-2ch blackhole-16ch   # audio driver → log out/in
+```
+
+Then in **Audio MIDI Setup**: create `Pi Talks (Zoom mic)` = [your headphones/output + BlackHole 2ch],
+and `Pi Listens (Zoom speaker)` = [your headphones/output + BlackHole 16ch].
+In the call app: **Microphone = BlackHole 2ch**, **Speaker = Pi Listens (Zoom speaker)** — or leave both
+on "same as system" and let `/conference` switch the system defaults for you.
 
 ## Requirements
 
-- macOS (uses `say`, `afplay`, `sox`, and a small compiled key-state watcher)
-- `sox` (`brew install sox`) for mic recording
-- Xcode command-line tools (`clang`) to compile `native/keywatcher.m` on first use
-- An OpenRouter OAuth login in `~/.pi/agent/auth.json` (used for STT and cloud TTS)
+- macOS (uses `say`, `afplay`, `sox`, and small compiled CoreAudio helpers)
+- `sox` (`brew install sox`) for mic recording and device routing
+- Xcode command-line tools (`clang`) to compile `native/keywatcher.m` and `native/audio-default.m` on first use
+- `BlackHole 2ch` + `BlackHole 16ch` for conference mode (`brew install --cask blackhole-2ch blackhole-16ch`)
+- An OpenRouter OAuth login in `~/.pi/agent/auth.json` (STT, cloud TTS, transcript summaries)
 
 ## Voices
 
@@ -105,6 +141,8 @@ Edit `config.json`:
 | `input.key` / `keyCode` | `space` / `49` | talk key |
 | `input.listenShortcut` | `ctrl+shift+l` | toggle `/listen` |
 | `input.talkShortcut` | `ctrl+shift+t` | toggle `/talk` |
+| `input.conferenceShortcut` | `ctrl+shift+c` | toggle `/conference` |
+| `input.micDevice` | `MacBook Pro Microphone` | the mic always used for talk + `/listen` (never the headset mic) |
 | `input.pollMs` | `25` | native release-poll interval |
 | `input.repeatSilenceMs` | `150` | autorepeat-fallback release threshold |
 | `input.debounceMs` | `250` | ignore a press this soon after release |
@@ -115,10 +153,18 @@ Edit `config.json`:
 | `audio.intervalMs` | `650` | pause between cue notes |
 | `listen.model` | `deepgram/nova-3` | OpenRouter STT model |
 | `listen.chunkSeconds` | `5` | transcription chunk size |
-| `listen.skipSilence` / `silenceThreshold` | `true` / `0.008` | skip silent chunks |
+| `listen.skipSilence` / `silenceThreshold` | `true` / `0.005` | skip silent chunks |
 | `listen.outputDir` | `~/.pi/listen` | transcript storage directory |
+| `conference.outputDevice` | `Pi Talks (Zoom mic)` | where pi's TTS plays (headphones + BlackHole 2ch) |
+| `conference.roomDevice` | `BlackHole 2ch` | the virtual device Zoom uses as its microphone |
+| `conference.remoteTapDevice` | `BlackHole 16ch` | remote meeting audio tapped into `/listen` |
+| `conference.relayMic` / `remoteTap` / `muteBusyCue` | `true` | relay, remote tap, and blip mute toggles |
+| `conference.systemInputDevice` | `BlackHole 2ch` | system default input while conference is on |
+| `conference.systemOutputDevice` | `Pi Listens (Zoom speaker)` | system default output while conference is on |
+| `conference.switchSystemDevices` | `true` | auto-switch these on enter, restore on exit |
 | `listen.contextWindowChars` | `6000` | recent transcript injected into the prompt |
-| `listen.widgetLines` | `8` | live transcript lines shown above the editor |
+| `listen.widgetLines` | `8` | transcript lines shown above the editor |
+| `listen.summaryModel` | `deepseek/deepseek-chat` | model that writes the save-time summary + slug |
 
 ## How release is detected
 

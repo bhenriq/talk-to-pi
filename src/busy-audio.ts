@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { TalkConfig } from "./config.ts";
+import { state } from "./state.ts";
 
 /**
  * Audible "processing" cue: two very soft notes alternating while pi is waiting
@@ -21,6 +22,7 @@ export class BusyAudio {
 
   setActive(active: boolean) {
     if (!this.cfg.audio.processingCue) return;
+    if (active && this.cfg.conference.muteBusyCue && state.conference) return;
     if (active === this.playing) return;
     this.playing = active;
     if (!active) {

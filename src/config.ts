@@ -28,6 +28,10 @@ export interface TalkConfig {
     listenShortcut: string;
     /** Keyboard shortcut to toggle /talk mode. */
     talkShortcut: string;
+    /** Keyboard shortcut to toggle /conference mode. */
+    conferenceShortcut: string;
+    /** The microphone always used for talk and /listen (never the headset mic). */
+    micDevice: string;
     /** macOS virtual keycode: 49 = space. */
     keyCode: number;
     pollMs: number;
@@ -63,6 +67,28 @@ export interface TalkConfig {
     contextWindowChars: number;
     /** How many recent transcript lines to show in the live footer widget (max 10). */
     widgetLines: number;
+    /** Model used to summarize the meeting and pick a filename slug on save. */
+    summaryModel: string;
+  };
+  conference: {
+    /** Where pi's TTS is played so both you and the room hear it (Multi-Output). */
+    outputDevice: string;
+    /** Virtual device whose input Zoom uses as its microphone (BlackHole 2ch). */
+    roomDevice: string;
+    /** Virtual device that taps the meeting audio into /listen (BlackHole 16ch). */
+    remoteTapDevice: string;
+    /** Relay your mic into the room while conference mode is on. */
+    relayMic: boolean;
+    /** Feed remote meeting audio into /listen while conference mode is on. */
+    remoteTap: boolean;
+    /** Silence the busy cue so the room never hears it. */
+    muteBusyCue: boolean;
+    /** While on, switch the system default input to this device. */
+    systemInputDevice: string;
+    /** While on, switch the system default output to this device. */
+    systemOutputDevice: string;
+    /** Auto-switch the system default input/output on enter, restore on exit. */
+    switchSystemDevices: boolean;
   };
 }
 
@@ -76,7 +102,7 @@ const DEFAULTS: TalkConfig = {
     model: "elevenlabs/eleven-flash-v2.5",
     format: "mp3",
   },
-  input: { key: "space", listenShortcut: "ctrl+shift+l", talkShortcut: "ctrl+shift+t", keyCode: 49, pollMs: 25, repeatSilenceMs: 150, debounceMs: 250, minRecordingMs: 400 },
+  input: { key: "space", listenShortcut: "ctrl+shift+l", talkShortcut: "ctrl+shift+t", conferenceShortcut: "ctrl+shift+c", micDevice: "MacBook Pro Microphone", keyCode: 49, pollMs: 25, repeatSilenceMs: 150, debounceMs: 250, minRecordingMs: 400 },
   promptNudge: true,
   audio: { processingCue: true, volume: 0.4, intervalMs: 650 },
   listen: {
@@ -90,6 +116,18 @@ const DEFAULTS: TalkConfig = {
     outputDir: "~/.pi/listen",
     contextWindowChars: 6000,
     widgetLines: 8,
+    summaryModel: "deepseek/deepseek-chat",
+  },
+  conference: {
+    outputDevice: "Pi Talks (Zoom mic)",
+    roomDevice: "BlackHole 2ch",
+    remoteTapDevice: "BlackHole 16ch",
+    relayMic: true,
+    remoteTap: true,
+    muteBusyCue: true,
+    systemInputDevice: "BlackHole 2ch",
+    systemOutputDevice: "Pi Listens (Zoom speaker)",
+    switchSystemDevices: true,
   },
 };
 

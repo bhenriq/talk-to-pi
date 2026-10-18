@@ -26,6 +26,9 @@ export class Speaker {
   private sayVoice: string | null = null;
   private ttsDir = join(tmpdir(), "talk-to-pi", "tts");
 
+  /** Called when a sentence actually starts playing (text is the spoken sentence). */
+  onSpeak?: (text: string) => void;
+
   constructor(
     private pi: ExtensionAPI,
     private cfg: TalkConfig,
@@ -79,6 +82,7 @@ export class Speaker {
         this.current = controller;
         state.speaking = true;
         refreshStatus();
+        this.onSpeak?.(text);
         try {
           if (this.cfg.tts.provider === "openrouter") {
             await this.speakOpenRouter(text, controller);
@@ -141,7 +145,7 @@ export class Speaker {
     const file = join(this.ttsDir, `s-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.mp3`);
     writeFileSync(file, buf);
     try {
-      await this.pi.exec("afplay", [file], { signal: controller.signal });
+      await this.playFile(file, controller);
     } finally {
       try {
         rmSync(file, { force: true });
@@ -153,7 +157,35 @@ export class Speaker {
 
   private async speakSay(text: string, controller: AbortController): Promise<void> {
     const voice = await this.resolveSayVoice();
-    const args = voice ? ["-v", voice, text] : [text];
+    if (!state.conference) {
+      const args = voice ? ["-v", voice, text] : [text];
+      await this.pi.exec(this.cfg.tts.command, args, { signal: controller.signal });
+      return;
+    }
+    // Conference: render to AIFF, then play it into the conference output device.
+    mkdirSync(this.ttsDir, { recursive: true });
+    const file = join(this.ttsDir, `s-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.aiff`);
+    const args = voice ? ["-v", voice, "-o", file, text] : ["-o", file, text];
     await this.pi.exec(this.cfg.tts.command, args, { signal: controller.signal });
+    try {
+      await this.playFile(file, controller);
+    } finally {
+      try {
+        rmSync(file, { force: true });
+      } catch {
+        // best-effort cleanup
+      }
+    }
+  }
+
+  /** Play an audio file to the right destination for the current mode. */
+  private playFile(file: string, controller: AbortController): Promise<unknown> {
+    if (state.conference) {
+      // sox targets a named CoreAudio output device (the Multi-Output).
+      return this.pi.exec("sox", [file, "-t", "coreaudio", this.cfg.conference.outputDevice], {
+        signal: controller.signal,
+      });
+    }
+    return this.pi.exec("afplay", [file], { signal: controller.signal });
   }
 }

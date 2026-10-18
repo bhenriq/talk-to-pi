@@ -2,10 +2,10 @@
 
 A pi extension that adds a `/talk` mode: **hold space to speak**, pi answers **out loud**.
 
-Status: implemented. State machine unit-tested via a mock harness; each mechanism verified live —
-sox capture + SIGTERM-flush, native key-state poll, OpenRouter STT (`input_audio`), OpenRouter TTS
-(`/audio/speech` → ElevenLabs Flash v2.5 → MP3 → `afplay`), and the `say` fallback. Full end-to-end in a
-real pi TUI session is the only remaining untested path.
+Status: implemented. `/talk`, `/listen` (pi-labeled lines + summary save-on-stop), and `/conference`
+(BlackHole routing + system-device switch) are wired and smoke-tested; push-to-talk, STT/TTS, the
+transcript pipeline, and the save-with-summary flow verified live. Conference routing is verified
+against the installed BlackHole devices but still warrants a real-call shakedown.
 
 ---
 
@@ -54,7 +54,7 @@ transcript is **auto-submitted** as a normal user message.
 ### Transcription
 
 ```
-sox -q -d -r 16000 -c 1 -b 16 <tmp>.wav          # record
+sox -q -t coreaudio <input.micDevice> -r 16000 -c 1 -b 16 <tmp>.wav   # record (named mic, never the headset mic)
 base64 <tmp>.wav                                 # -> input_audio
 POST https://openrouter.ai/api/v1/chat/completions
   model: mistralai/voxtral-small-24b-2507
@@ -117,16 +117,26 @@ space again to talk.
 | `input.minRecordingMs` | `400` |
 | `input.listenShortcut` | `ctrl+shift+l` |
 | `input.talkShortcut` | `ctrl+shift+t` |
+| `input.conferenceShortcut` | `ctrl+shift+c` |
+| `input.micDevice` | `MacBook Pro Microphone` |
+| `conference.outputDevice` | `Pi Talks (Zoom mic)` |
+| `conference.roomDevice` | `BlackHole 2ch` |
+| `conference.remoteTapDevice` | `BlackHole 16ch` |
+| `conference.relayMic` / `remoteTap` / `muteBusyCue` | `true` |
+| `conference.systemInputDevice` | `BlackHole 2ch` |
+| `conference.systemOutputDevice` | `Pi Listens (Zoom speaker)` |
+| `conference.switchSystemDevices` | `true` |
 | `promptNudge` | `true` |
 | `audio.processingCue` | `true` |
 | `audio.volume` | `0.4` |
 | `audio.intervalMs` | `650` |
 | `listen.model` | `deepgram/nova-3` |
 | `listen.chunkSeconds` | `5` |
-| `listen.skipSilence` / `silenceThreshold` | `true` / `0.008` |
+| `listen.skipSilence` / `silenceThreshold` | `true` / `0.005` |
 | `listen.outputDir` | `~/.pi/listen` |
 | `listen.contextWindowChars` | `6000` |
 | `listen.widgetLines` | `8` |
+| `listen.summaryModel` | `deepseek/deepseek-chat` |
 
 ## 6. Packaging
 
@@ -137,8 +147,8 @@ space again to talk.
 ## 7. Engineering constraints
 
 - Never start timers/processes in the extension factory: start on `session_start`, clean up in
-  `session_shutdown` (idempotently). Kill `sox`, `say`/`afplay`, the key-watcher helper, and all timers
-  on shutdown and on `/talk` off.
+  `session_shutdown` (idempotently). Kill `sox`, `say`/`afplay`, the key-watcher/audio-default helpers,
+  the relay, and all timers on shutdown and on `/talk` off; restore the previous system default audio devices.
 - Keyboard capture via `ctx.ui.onTerminalInput()`, which intercepts raw keys **before** the editor.
   Consume space/Esc while talk mode is on; return `undefined` for everything else so normal editing —
   including pi-vim — is untouched. **No editor replacement, so pi-vim coexists without loss.**
@@ -161,10 +171,33 @@ A separate, listen-only mode. `/listen` or the `ctrl+shift+l` shortcut toggles i
   prompt on every turn (a `listen_transcript` prompt section); a model-callable
   `listen_transcript` tool searches the full transcript for older content.
 - Listen mode is independent of talk mode and does not trigger TTS or the busy cue.
-- Footer shows `📝 listen: recording · N segments`; a widget above the editor streams the last
-  `listen.widgetLines` transcript lines live as it unfolds.
+- Footer shows `📝 listen: recording · N segments`; a widget above the editor shows only the last
+  `listen.widgetLines` transcript lines (status bar is the sole listening indicator).
+- pi's own spoken answers are appended as `pi: …` lines (exact text, no STT) while listening;
+  pi is the only identified speaker, other lines are unlabeled.
+- **On stop**, pi offers to save a finalized Markdown file: an LLM summary at the top and filename
+  `YYYY-MM-DD-<slug>.md` (date + a slug summarizing the meeting); declining keeps the raw file.
 
-## 9. Out of scope (for now)
+## 9. Conference mode (`/conference`)
+
+Routes pi into a call app, using `sox -t coreaudio` device targeting (no native code).
+
+- **TTS destination**: while on, pi's spoken replies are played into `conference.outputDevice`
+  (a Multi-Output of your headphones + `roomDevice`) so both you and the room hear them.
+- **Mic relay**: `sox micDevice → roomDevice` continuously, so the room hears you too. Relies on
+  the assumption that you do not speak at the same time as pi (no mixer required).
+- **Remote tap**: `/listen` adds a second capture source (`remoteTapDevice`) while conference mode
+  is on, so the transcript includes remote participants as well as your mic. Timestamps are wall-clock,
+  interleaving both sources.
+- Mutes the busy cue (`muteBusyCue`) so the room never hears it.
+- Status bar shows `🔊 conf: on`. Toggled by `/conference` or `ctrl+shift+c`.
+- **System device switch**: on enter, the system default input/output are captured and set to
+  `systemInputDevice` / `systemOutputDevice` (so a call app aligned on "same as system" follows);
+  on exit, reload, or shutdown the previous devices are restored (native `audio-default` helper).
+
+Requires BlackHole 2ch + 16ch and an Audio MIDI Setup of two Multi-Output devices (documented in README).
+
+## 10. Out of scope (for now)
 
 - VAD / silence-based auto-stop, continuous listening.
 

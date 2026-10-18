@@ -11,6 +11,7 @@ export const state = {
   transcribing: false,
   listenRecording: false,
   listenChunks: 0,
+  conference: false,
 };
 
 // Voice-wave animation frames shown while waiting (transcribing or thinking).
@@ -49,6 +50,7 @@ export function resetState() {
   state.transcribing = false;
   state.listenRecording = false;
   state.listenChunks = 0;
+  state.conference = false;
 }
 
 /** Waiting = between releasing the talk key and pi starting to speak back. */
@@ -102,14 +104,20 @@ function listenLabel(): string | undefined {
   return `📝 listen: recording · ${state.listenChunks} segments`;
 }
 
+function conferenceLabel(): string | undefined {
+  return state.conference ? "🔊 conf: on" : undefined;
+}
+
 export function refreshStatus() {
   ensureAnimation();
   state.ctx?.ui.setStatus("talk-to-pi-talk", talkLabel());
   state.ctx?.ui.setStatus("talk-to-pi-listen", listenLabel());
+  state.ctx?.ui.setStatus("talk-to-pi-conf", conferenceLabel());
 }
 
 export function clearStatus() {
   stopAnimation();
   state.ctx?.ui.setStatus("talk-to-pi-talk", undefined);
   state.ctx?.ui.setStatus("talk-to-pi-listen", undefined);
+  state.ctx?.ui.setStatus("talk-to-pi-conf", undefined);
 }
