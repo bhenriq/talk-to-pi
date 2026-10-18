@@ -1,0 +1,110 @@
+# talk-to-pi
+
+A pi extension that adds a **`/talk`** voice mode: hold space to talk, pi answers out loud.
+
+- **Hold `space`** → pi records your voice (`sox` → OpenRouter `input_audio` STT).
+- **Release** → pi transcribes and auto-submits it as your message.
+- **Esc** → stop pi talking and abort the run; when idle, Esc exits talk mode.
+- pi's answers are **spoken aloud** (OpenRouter → ElevenLabs TTS by default, `say` offline fallback), streamed sentence by sentence.
+
+See [`SPEC.md`](SPEC.md) for the full behaviour contract and [`config.json`](config.json) for tunables.
+
+## Install
+
+```sh
+# global (available in every pi session)
+ln -sfn "$PWD" ~/.pi/agent/extensions/talk
+
+# or project-only during development
+pi --extension ./talk-to-pi
+```
+
+Restart pi (or run `/reload`), then type `/talk`.
+
+## Usage
+
+| key | when | action |
+|---|---|---|
+| **hold `space`** | idle, talk mode on | start recording |
+| **release** | recording | stop, transcribe, submit |
+| **Esc** | recording | cancel recording |
+| **Esc** | while pi is working/speaking | stop audio + abort the run |
+| **Esc** | idle, talk mode on | exit talk mode |
+| `/talk` | any time | toggle talk mode |
+
+While talk mode is on, `space` is reserved for recording (it is never inserted into the
+editor); all other keys behave normally.
+
+The footer shows the current state: `🎙 talk: idle` · `🎙 listening` · `🎙 transcribing…` ·
+`🧠 thinking` · `🔊 speaking`. While waiting (transcribing or thinking), the wave animates so
+you can see pi is working from the moment you release space until it starts speaking back.
+
+A soft two-note audio cue (a gentle low→high blip every ~0.6 s) plays during the same wait
+window, so you can also **hear** that pi is processing. It stops the instant speech starts or
+the mode turns off. Disable it with `audio.processingCue: false`.
+
+## Requirements
+
+- macOS (uses `say`, `afplay`, `sox`, and a small compiled key-state watcher)
+- `sox` (`brew install sox`) for mic recording
+- Xcode command-line tools (`clang`) to compile `native/keywatcher.m` on first use
+- An OpenRouter OAuth login in `~/.pi/agent/auth.json` (used for STT and cloud TTS)
+
+## Voices
+
+The default TTS voice is **aria** (ElevenLabs Flash v2.5, through OpenRouter — no extra key).
+Available curated voices, set via `tts.voice` in `config.json`:
+
+`aria` · `rachel` · `sarah` · `adam` · `antoni` · `george` — or any raw ElevenLabs voice id.
+
+To audition a cloud voice, generate a clip and listen:
+
+```sh
+curl -s https://openrouter.ai/api/v1/audio/speech \
+  -H "Authorization: Bearer $(jq -r .openrouter.access ~/.pi/agent/auth.json)" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"elevenlabs/eleven-flash-v2.5","input":"Alright, I will refactor the login handler.","voice":"9BWtsMINqrJLrRacOk9x","response_format":"mp3"}' \
+  -o /tmp/voice.mp3 && afplay /tmp/voice.mp3
+```
+
+(`9BWtsMINqrJLrRacOk9x` = aria; the other curated ids map is in `src/speaker.ts`.)
+
+Swap `tts.provider` to `"say"` for a fully offline voice, with `tts.sayVoice: "auto"`
+picking the best installed macOS English voice.
+
+## Configuration
+
+Edit `config.json`:
+
+| key | default | meaning |
+|---|---|---|
+| `stt.model` | `mistralai/voxtral-small-24b-2507` | OpenRouter model with `input_audio` support |
+| `stt.sampleRate` / `channels` / `bits` | `16000` / `1` / `16` | sox capture format |
+| `tts.provider` | `openrouter` | `openrouter` (cloud) or `say` (offline) |
+| `tts.model` | `elevenlabs/eleven-flash-v2.5` | OpenRouter TTS model |
+| `tts.voice` | `aria` | voice name or ElevenLabs voice id (cloud) |
+| `tts.format` | `mp3` | output format for cloud TTS |
+| `tts.command` | `say` | TTS binary used by the `say` provider |
+| `tts.sayVoice` | `auto` | voice name for the `say` provider |
+| `input.key` / `keyCode` | `space` / `49` | talk key |
+| `input.pollMs` | `25` | native release-poll interval |
+| `input.repeatSilenceMs` | `150` | autorepeat-fallback release threshold |
+| `input.debounceMs` | `250` | ignore a press this soon after release |
+| `input.minRecordingMs` | `400` | recordings shorter than this are discarded |
+| `promptNudge` | `true` | append a voice-style instruction to the system prompt |
+| `audio.processingCue` | `true` | audible blip while waiting (transcribing/thinking) |
+| `audio.volume` | `0.4` | cue volume (0–1) |
+| `audio.intervalMs` | `650` | pause between cue notes |
+
+## How release is detected
+
+Terminals inside tmux (and Terminal.app) do not deliver key-**release** events, so the
+terminal cannot tell when you let go of space. talk-to-pi instead polls the macOS keyboard
+state (`CGEventSourceKeyState`) via `native/keywatcher.m`, compiled on first use by the
+extension. If the native poll cannot see the key, it falls back to autorepeat cadence.
+
+## Costs
+
+- **STT** (`voxtral-small`): ~$0.0006 per ~6 s utterance.
+- **TTS default** (`elevenlabs/eleven-flash-v2.5`): ~$0.02 per 1k characters — roughly a
+  cent for a handful of spoken sentences. Set `tts.provider: "say"` for zero cost.
