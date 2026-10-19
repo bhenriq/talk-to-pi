@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
@@ -109,6 +109,8 @@ export class Listener {
   private bytesPerChunk: number;
   private queue: Promise<void> = Promise.resolve();
   private lines: Array<{ t: string; text: string }> = [];
+  /** Where the last finished transcript lives, so it stays readable after /listen stops. */
+  savedPath: string | null = null;
   private startAt = 0;
 
   filePath = "";
@@ -131,6 +133,7 @@ export class Listener {
     if (this.sources.length > 0) return;
     this.lines = [];
     this.chunkCount = 0;
+    this.savedPath = null; // a new session replaces the searchable transcript
     this.startAt = Date.now();
 
     const dir = this.resolveDir();
@@ -268,12 +271,38 @@ export class Listener {
     this.clearWidget();
   }
 
-  /** Drop the transcript lines too (after saving, or on session reset). */
+  /**
+   * Drop the in-memory transcript (after saving, or on session reset). The file on
+   * disk is still reachable through `savedPath`, so `search()` keeps working.
+   */
   forget() {
+    if (this.filePath) this.savedPath = this.filePath;
     this.lines = [];
     this.chunkCount = 0;
     this.filePath = null;
     this.clearWidget();
+  }
+
+  /** Point search at a finalized file (after the save prompt renames it). */
+  remember(file: string) {
+    this.savedPath = file;
+  }
+
+  /** Read a previously saved transcript, so search still works after stopping. */
+  private savedLines(): Array<{ t: string; text: string }> {
+    if (!this.savedPath || !existsSync(this.savedPath)) return [];
+    try {
+      return readFileSync(this.savedPath, "utf8")
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.startsWith("[") && l.includes("] "))
+        .map((l) => {
+          const close = l.indexOf("] ");
+          return { t: l.slice(1, close), text: l.slice(close + 2) };
+        });
+    } catch {
+      return [];
+    }
   }
 
   /** Kill capture + clear the transcript and widget (used on session reset). */
@@ -322,15 +351,17 @@ export class Listener {
 
   /** Search the transcript; empty query returns the most recent lines. */
   search(query: string, maxLines = 14): string {
-    if (this.lines.length === 0) return "No transcript recorded yet.";
+    // Live lines first; after a session settles, fall back to the saved file.
+    const source = this.lines.length > 0 ? this.lines : this.savedLines();
+    if (source.length === 0) return "No transcript recorded yet.";
     const q = query.trim().toLowerCase();
     if (!q) {
-      return this.lines
+      return source
         .slice(-40)
         .map((l) => `[${l.t}] ${l.text}`)
         .join("\n");
     }
-    const hits = this.lines.filter((l) => l.text.toLowerCase().includes(q));
+    const hits = source.filter((l) => l.text.toLowerCase().includes(q));
     if (hits.length === 0) return `No lines matching "${query}".`;
     return hits
       .slice(-maxLines)

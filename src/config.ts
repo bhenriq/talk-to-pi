@@ -73,6 +73,14 @@ export interface TalkConfig {
     widgetLines: number;
     /** Model used to summarize the meeting and pick a filename slug on save. */
     summaryModel: string;
+    /**
+     * What `/listen` leaves in the conversation when it stops, so the discussion
+     * stays usable after the fact:
+     * - `summary` keeps a short LLM-written recap plus the file path (cheap)
+     * - `full` keeps the whole transcript in context (accurate, token-heavy)
+     * - `none` keeps nothing in context; the file stays on disk
+     */
+    contextMode: "summary" | "full" | "none";
   };
   conference: {
     /** Where pi's TTS is played so both you and the room hear it (Multi-Output). */
@@ -122,6 +130,7 @@ const DEFAULTS: TalkConfig = {
     contextWindowChars: 6000,
     widgetLines: 8,
     summaryModel: "deepseek/deepseek-chat",
+    contextMode: "summary",
   },
   conference: {
     outputDevice: "Pi Talks (Zoom mic)",

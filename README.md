@@ -87,6 +87,19 @@ When you **stop** `/listen`, pi offers to save a finalized Markdown file: an LLM
 summary at the top, and a filename `date_title.md` — e.g. `2026-10-18_q3-launch-plan.md` — where the
 title is a short summary of the conversation. Declining keeps the raw transcript file. Output dir: `~/.pi/listen/`.
 
+The discussion **stays in context after you stop**: pi leaves a durable note in the conversation
+containing the summary and the file path, so later questions about “the meeting” still work. The
+live widget disappears when recording stops, but the full transcript remains searchable through the
+`listen_transcript` tool — it reads the saved Markdown once the session has ended.
+
+`listen.contextMode` controls the trade-off:
+
+| value | what stays in context | cost |
+|---|---|---|
+| `summary` (default) | LLM recap + file path | a few hundred tokens |
+| `full` | the entire transcript (capped at 20k chars) | thousands of tokens, every turn |
+| `none` | nothing (file only, still searchable) | zero |
+
 ## Conference mode
 
 `/conference` (or `ctrl+shift+c`) lets pi join your Zoom/Meet call.
@@ -191,6 +204,7 @@ Edit `config.json`:
 | `listen.contextWindowChars` | `6000` | recent transcript injected into the prompt |
 | `listen.widgetLines` | `8` | transcript lines shown above the editor |
 | `listen.summaryModel` | `deepseek/deepseek-chat` | model that writes the save-time summary + title |
+| `listen.contextMode` | `summary` | what stays in context on stop: `summary`, `full`, `none` |
 
 ## How release is detected
 

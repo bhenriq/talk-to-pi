@@ -206,9 +206,11 @@ export default function (pi: ExtensionAPI) {
     state.ctx = ctx;
   }
 
-  async function offerSaveTranscript(ctx: ExtensionContext) {
+  async function offerSaveTranscript(
+    ctx: ExtensionContext,
+  ): Promise<{ file: string; summary: string | null } | null> {
     const transcript = listener.transcriptText.trim();
-    if (!transcript) return;
+    if (!transcript) return null;
     const want = await ctx.ui.confirm(
       "Save meeting transcript?",
       `${listener.chunkCount} segments recorded. Save as Markdown with a summary at the top?`,
@@ -216,7 +218,7 @@ export default function (pi: ExtensionAPI) {
     const rawPath = listener.filePath;
     if (!want) {
       ctx.ui.notify(`Raw transcript kept at ${rawPath}`, "info");
-      return;
+      return rawPath ? { file: rawPath, summary: null } : null;
     }
     ctx.ui.notify("Summarizing meeting…", "info");
     try {
@@ -237,10 +239,59 @@ export default function (pi: ExtensionAPI) {
         }
       }
       ctx.ui.notify(`Transcript saved to ${file}`, "info");
+      return { file, summary };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       ctx.ui.notify(`Could not summarize (${msg}); raw transcript kept at ${rawPath}`, "warning");
+      return rawPath ? { file: rawPath, summary: null } : null;
     }
+  }
+
+  /**
+   * Keep the discussion usable after /listen stops by leaving a durable note in the
+   * conversation. A summary costs a couple hundred tokens on every later turn; the
+   * whole transcript can cost thousands, so the default is the summary and the file
+   * stays searchable through the `listen_transcript` tool.
+   */
+  async function handTranscriptToContext(
+    ctx: ExtensionContext,
+    saved: { file: string; summary: string | null } | null,
+    transcript: string,
+  ) {
+    const mode = cfg.listen.contextMode;
+    if (mode === "none" || !transcript) return;
+
+    const where = saved?.file ? `\n\nFull transcript: ${saved.file}` : "";
+    const lines = transcript.split("\n").length;
+    let body: string;
+    if (mode === "full") {
+      // generous but bounded: a very long meeting should not blow up every request
+      const cap = 20_000;
+      const clipped = transcript.length > cap ? `…\n${transcript.slice(-cap)}` : transcript;
+      body =
+        `Meeting transcript (${lines} lines, oldest first, HH:MM:SS):\n\n${clipped}${where}\n\n` +
+        "The recording has stopped; this transcript is the record of what was said.";
+    } else {
+      const recap = saved?.summary?.trim() || firstLines(transcript, 12);
+      body =
+        `A /listen session just ended (${lines} lines transcribed). Summary:\n\n${recap}${where}\n\n` +
+        "Use the listen_transcript tool to search the full transcript for details.";
+    }
+
+    try {
+      await pi.sendMessage(
+        { customType: "listen-transcript", content: body, display: false },
+        { triggerTurn: false },
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      ctx.ui.notify(`Could not keep the transcript in context: ${msg}`, "warning");
+    }
+  }
+
+  /** Compact fallback when no summary could be generated. */
+  function firstLines(transcript: string, max: number): string {
+    return transcript.split("\n").slice(0, max).join("\n");
   }
 
   async function toggleListen(ctx: ExtensionContext) {
@@ -255,8 +306,11 @@ export default function (pi: ExtensionAPI) {
       state.listenChunks = 0;
       refreshStatus();
       ctx.ui.notify(`Listening stopped — ${listener.chunkCount} segments transcribed`, "info");
-      await offerSaveTranscript(ctx);
-      listener.forget();
+      const transcript = listener.transcriptText.trim();
+      const saved = await offerSaveTranscript(ctx);
+      listener.forget(); // moves the raw path into savedPath
+      if (saved?.file) listener.remember(saved.file);
+      await handTranscriptToContext(ctx, saved, transcript);
     } else {
       listener.start();
       state.listenRecording = true;
@@ -355,7 +409,8 @@ export default function (pi: ExtensionAPI) {
       name: "listen_transcript",
       description:
         "Search the transcript recorded by /listen. Pass a word or phrase to find matching lines with timestamps, " +
-        "or an empty string to see the most recent transcript. Use it whenever the user asks what was said.",
+        "or an empty string to see the most recent transcript. Works during a session and after it stops, when it " +
+        "reads the saved Markdown file. Use it whenever the user asks what was said.",
       parameters: Type.Object({
         query: Type.Optional(Type.String({ description: "Search term; empty for the most recent transcript" })),
       }),

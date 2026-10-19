@@ -142,6 +142,7 @@ space again to talk.
 | `listen.contextWindowChars` | `6000` |
 | `listen.widgetLines` | `8` |
 | `listen.summaryModel` | `deepseek/deepseek-chat` |
+| `listen.contextMode` | `summary` (or `full` / `none`) |
 
 ## 6. Packaging
 
@@ -183,6 +184,13 @@ A separate, listen-only mode. `/listen` or the `ctrl+shift+l` shortcut toggles i
 - **On stop**, pi offers to save a finalized Markdown file: an LLM summary at the top and filename
   `YYYY-MM-DD_<title>.md` — a `date_title` filename where the title is a short summary of the
   conversation; declining keeps the raw file.
+- The live widget is hidden the moment capture stops (no repaint from a late chunk or a spoken
+  reply); in-memory lines are dropped after the save prompt.
+- **Context handoff**: stopping appends one durable custom message (`listen-transcript`) to the
+  session so the discussion stays usable — `listen.contextMode: summary` (recap + file path),
+  `full` (whole transcript, 20k-char cap) or `none`. It never triggers a turn.
+- `listen_transcript` searches live lines first, then falls back to the saved Markdown file, so it
+  keeps working after the session ends and the in-memory lines are gone.
 
 ## 9. Conference mode (`/conference`)
 

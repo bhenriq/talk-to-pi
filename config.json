@@ -44,6 +44,7 @@
     "outputDir": "~/.pi/listen",
     "contextWindowChars": 6000,
     "widgetLines": 8,
+    "contextMode": "summary",
     "summaryModel": "deepseek/deepseek-chat"
   },
   "conference": {
