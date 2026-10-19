@@ -135,6 +135,14 @@ toggle off — so a call app set to "same as system" follows automatically (no p
 - the busy blip plays into the room Multi-Output like pi's voice, so participants hear it too
   (`conference.muteBusyCue: true` silences it).
 
+**Balancing your voice vs pi's.** The two paths into the room have different levels: pi's TTS
+arrives from ElevenLabs already normalized (near 0 dBFS), while your mic arrives at whatever the
+room and mic gain give it — so pi usually sounds louder. Set `conference.micGain` (e.g. `2.0`) to
+bring yourself up, or `conference.ttsGain` (e.g. `0.7`) to bring pi down. Both are linear gains
+(`sox ... vol`). If boosting the mic past ~2× starts to sound harsh, your mic was already near full
+scale — lower `ttsGain` instead. Gains are read when conference mode starts, so toggle it off/on
+after editing `config.json`.
+
 **One-time setup:**
 
 ```sh
@@ -218,6 +226,8 @@ Edit `config.json`:
 | `conference.roomDevice` | `BlackHole 2ch` | the virtual device Zoom uses as its microphone |
 | `conference.remoteTapDevice` | `BlackHole 16ch` | remote meeting audio tapped into `/listen` |
 | `conference.relayMic` / `remoteTap` | `true` | room relays toggles |
+| `conference.micGain` | `1.0` | gain on your relayed mic (raise if the room hears you quieter than pi) |
+| `conference.ttsGain` | `1.0` | gain on pi's voice in the room (lower it to balance) |
 | `conference.muteBusyCue` | `false` | silence the cue in calls (it normally plays into the room) |
 | `conference.systemInputDevice` | `BlackHole 2ch` | system default input while conference is on |
 | `conference.systemOutputDevice` | `Pi Listens (Zoom speaker)` | system default output while conference is on |

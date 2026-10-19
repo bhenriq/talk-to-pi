@@ -210,10 +210,14 @@ export class Speaker {
   /** Play an audio file to the right destination for the current mode. */
   private playFile(file: string, controller: AbortController): Promise<unknown> {
     if (state.conference) {
-      // sox targets a named CoreAudio output device (the Multi-Output).
-      return this.pi.exec("sox", [file, "-t", "coreaudio", this.cfg.conference.outputDevice], {
-        signal: controller.signal,
-      });
+      // sox targets a named CoreAudio output device (the Multi-Output). `ttsGain`
+      // keeps pi's voice from drowning out the relayed mic in the room.
+      const gain = this.cfg.conference.ttsGain;
+      const args = [file, "-t", "coreaudio", this.cfg.conference.outputDevice];
+      if (Number.isFinite(gain) && Math.abs(gain - 1) > 0.001 && gain > 0) {
+        args.push("vol", String(gain));
+      }
+      return this.pi.exec("sox", args, { signal: controller.signal });
     }
     return this.pi.exec("afplay", [file], { signal: controller.signal });
   }

@@ -53,6 +53,8 @@
     "roomDevice": "BlackHole 2ch",
     "remoteTapDevice": "BlackHole 16ch",
     "relayMic": true,
+    "micGain": 1.0,
+    "ttsGain": 1.0,
     "remoteTap": true,
     "muteBusyCue": false,
     "systemInputDevice": "BlackHole 2ch",

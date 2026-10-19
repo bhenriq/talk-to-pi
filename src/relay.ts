@@ -14,11 +14,14 @@ export class Relay {
   start() {
     if (this.proc) return;
     const c = this.cfg.conference;
+    const gain = Number.isFinite(c.micGain) && c.micGain > 0 ? c.micGain : 1;
     this.proc = spawn("sox", [
       "-q",
       "-t", "coreaudio", this.cfg.input.micDevice,
       "-t", "coreaudio", c.roomDevice,
       "channels", "2", // mic is mono, room device is stereo
+      // Balance against pi's voice, which arrives from TTS already normalized.
+      ...(Math.abs(gain - 1) > 0.001 ? ["vol", String(gain)] : []),
     ]);
     this.proc.stderr.on("data", () => {});
     this.proc.on("error", (err) => {

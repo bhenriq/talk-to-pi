@@ -96,6 +96,10 @@ export interface TalkConfig {
     remoteTapDevice: string;
     /** Relay your mic into the room while conference mode is on. */
     relayMic: boolean;
+    /** Linear gain applied to your relayed mic signal (1 = unchanged). */
+    micGain: number;
+    /** Linear gain applied to pi's voice in the room (1 = unchanged). */
+    ttsGain: number;
     /** Feed remote meeting audio into /listen while conference mode is on. */
     remoteTap: boolean;
     /** Silence the busy cue entirely while conference mode is on (false by default: it plays into the room like pi's voice). */
@@ -142,6 +146,8 @@ const DEFAULTS: TalkConfig = {
     roomDevice: "BlackHole 2ch",
     remoteTapDevice: "BlackHole 16ch",
     relayMic: true,
+    micGain: 1.0,
+    ttsGain: 1.0,
     remoteTap: true,
     muteBusyCue: false,
     systemInputDevice: "BlackHole 2ch",
