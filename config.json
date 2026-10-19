@@ -32,7 +32,7 @@
     "processingCue": true,
     "volume": 0.4,
     "intervalMs": 650,
-    "cueDevice": "OpenSwim Pro by Shokz"
+    "cueDevice": "Pi Talks (Zoom mic)"
   },
   "listen": {
     "model": "deepgram/nova-3",

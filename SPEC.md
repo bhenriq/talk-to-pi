@@ -204,8 +204,9 @@ Routes pi into a call app, using `sox -t coreaudio` device targeting (no native 
 - **Remote tap**: `/listen` adds a second capture source (`remoteTapDevice`) while conference mode
   is on, so the transcript includes remote participants as well as your mic. Timestamps are wall-clock,
   interleaving both sources.
-- The busy cue plays privately to `audio.cueDevice` during conference (so it never reaches
-  BlackHole); `muteBusyCue` remains the fallback when no cue device is configured.
+- The busy cue plays to `audio.cueDevice` during conference: headphones for a private blip,
+  or the room Multi-Output (`conference.outputDevice`) so participants hear it; the transcript
+  tap is never polluted. `muteBusyCue` remains the fallback when no cue device is configured.
 - Status bar shows `🔊 conf: on`. Toggled by `/conference` or `ctrl+shift+c`.
 - **System device switch**: on enter, the system default input/output are captured and set to
   `systemInputDevice` / `systemOutputDevice` (so a call app aligned on "same as system" follows);

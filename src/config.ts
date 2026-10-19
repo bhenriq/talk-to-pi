@@ -56,8 +56,10 @@ export interface TalkConfig {
     /** Pause between cue notes, in ms. */
     intervalMs: number;
     /**
-     * Private output device for the cue while conference mode is on, so you hear
-     * it but neither BlackHole tap picks it up. Empty = no private route.
+     * Where the cue plays while conference mode is on. Point it at your
+     * headphones for a private blip, or at the room Multi-Output
+     * (`conference.outputDevice`) so meeting participants hear it too.
+     * Empty = no dedicated route (falls back to `muteBusyCue`).
      */
     cueDevice: string;
   };

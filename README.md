@@ -68,9 +68,10 @@ A soft two-note audio cue (a gentle low→high blip every ~0.6 s) plays during t
 window, so you can also **hear** that pi is processing. It stops the instant speech starts or
 the mode turns off. Disable it with `audio.processingCue: false`.
 
-In conference mode the cue is played straight to `audio.cueDevice` (your headphones) instead of
-the system output, so you still hear it while the BlackHole taps stay clean. Leave it empty to
-fall back to `muteBusyCue`.
+In conference mode the cue is played to `audio.cueDevice` instead of the system output. Point it
+at your headphones for a private blip, or at the room Multi-Output (`Pi Talks (Zoom mic)`) so
+meeting participants hear it too — either way it never pollutes the `/listen` tap. Leave it empty
+to fall back to `muteBusyCue`.
 
 ## Listen mode
 
@@ -119,8 +120,8 @@ toggle off — so a call app set to "same as system" follows automatically (no p
   the same time as pi, no mixer is needed).
 - **`/listen` hears everyone.** while conference mode is on, `/listen` also transcribes the
   remote meeting audio (tapped from BlackHole 16ch) alongside your mic.
-- the busy blip plays privately to `audio.cueDevice` so you still hear it without it reaching
-  the call mic or the transcript tap.
+- the busy blip plays to `audio.cueDevice` — your headphones for a private blip, or
+  `Pi Talks (Zoom mic)` so the room hears it too — without reaching the transcript tap.
 
 **One-time setup:**
 
@@ -194,7 +195,7 @@ Edit `config.json`:
 | `promptNudge` | `true` | append a voice-style instruction to the system prompt |
 | `audio.processingCue` | `true` | audible blip while waiting (transcribing/thinking) |
 | `audio.volume` | `0.4` | cue volume (0–1) |
-| `audio.cueDevice` | `` | private output for the cue in conference mode (your headphones) |
+| `audio.cueDevice` | `` | conference cue destination: headphones (private) or the room Multi-Output |
 | `audio.intervalMs` | `650` | pause between cue notes |
 | `listen.model` | `deepgram/nova-3` | OpenRouter STT model |
 | `listen.chunkSeconds` | `5` | transcription chunk size |
