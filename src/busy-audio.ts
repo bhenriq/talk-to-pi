@@ -4,7 +4,6 @@ import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { TalkConfig } from "./config.ts";
 import { state } from "./state.ts";
-import { getAudioDefaultBinary } from "./system-audio.ts";
 
 /**
  * Audible "processing" cue: two very soft notes alternating while pi is waiting
@@ -15,20 +14,15 @@ export class BusyAudio {
   private controller: AbortController | null = null;
   private cues: string[] | null = null;
   private generating: Promise<string[]> | null = null;
-  private playBin: string | null;
 
   constructor(
     private pi: ExtensionAPI,
     private cfg: TalkConfig,
-  ) {
-    this.playBin = getAudioDefaultBinary();
-  }
+  ) {}
 
   setActive(active: boolean) {
     if (!this.cfg.audio.processingCue) return;
-    // In conference the system output feeds the BlackHole tap; without a private
-    // cue device configured, keep the old mute-the-blip behaviour.
-    if (active && state.conference && this.cfg.conference.muteBusyCue && !this.cfg.audio.cueDevice) return;
+    if (active && state.conference && this.cfg.conference.muteBusyCue) return;
     if (active === this.playing) return;
     this.playing = active;
     if (!active) {
@@ -78,15 +72,17 @@ export class BusyAudio {
   }
 
   /**
-   * Play one cue note. During conference the cue must not reach BlackHole
-   * (which feeds the meet mic or the transcript tap), so it is played straight
-   * to the private `audio.cueDevice` through the native helper; otherwise
-   * afplay to the system default is fine.
+   * Play one cue note. During conference the cue rides the exact same path as
+   * pi's voice (sox → the room Multi-Output), so meeting participants hear the
+   * blip too; the `/listen` remote tap (BlackHole 16ch) is not on that path, so
+   * the transcript stays clean. Outside conference, afplay to the default output.
    */
   private play(cue: string, controller: AbortController): Promise<unknown> {
     const vol = String(this.cfg.audio.volume);
-    if (state.conference && this.cfg.audio.cueDevice && this.playBin) {
-      return this.pi.exec(this.playBin, ["play", this.cfg.audio.cueDevice, cue, vol], { signal: controller.signal });
+    if (state.conference) {
+      return this.pi.exec("sox", ["-v", vol, cue, "-t", "coreaudio", this.cfg.conference.outputDevice], {
+        signal: controller.signal,
+      });
     }
     return this.pi.exec("afplay", ["-v", vol, cue], { signal: controller.signal });
   }

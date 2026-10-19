@@ -1,2 +1,4 @@
 native/build/
 video/build/
+.DS_Store
+*.swp

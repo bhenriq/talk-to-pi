@@ -127,14 +127,15 @@ space again to talk.
 | `conference.outputDevice` | `Pi Talks (Zoom mic)` |
 | `conference.roomDevice` | `BlackHole 2ch` |
 | `conference.remoteTapDevice` | `BlackHole 16ch` |
-| `conference.relayMic` / `remoteTap` / `muteBusyCue` | `true` |
+| `conference.relayMic` / `remoteTap` | `true` |
+| `conference.muteBusyCue` | `false` |
 | `conference.systemInputDevice` | `BlackHole 2ch` |
 | `conference.systemOutputDevice` | `Pi Listens (Zoom speaker)` |
 | `conference.switchSystemDevices` | `true` |
 | `promptNudge` | `true` |
 | `audio.processingCue` | `true` |
 | `audio.volume` | `0.4` |
-| `audio.cueDevice` | `` |
+
 | `audio.intervalMs` | `650` |
 | `listen.model` | `deepgram/nova-3` |
 | `listen.chunkSeconds` | `5` |
@@ -204,9 +205,9 @@ Routes pi into a call app, using `sox -t coreaudio` device targeting (no native 
 - **Remote tap**: `/listen` adds a second capture source (`remoteTapDevice`) while conference mode
   is on, so the transcript includes remote participants as well as your mic. Timestamps are wall-clock,
   interleaving both sources.
-- The busy cue plays to `audio.cueDevice` during conference: headphones for a private blip,
-  or the room Multi-Output (`conference.outputDevice`) so participants hear it; the transcript
-  tap is never polluted. `muteBusyCue` remains the fallback when no cue device is configured.
+- During conference the busy cue plays through `conference.outputDevice` (sox, the voice path),
+  so participants hear it; the `/listen` remote tap is not on that path. `muteBusyCue` (default
+  false) silences it entirely in calls.
 - Status bar shows `🔊 conf: on`. Toggled by `/conference` or `ctrl+shift+c`.
 - **System device switch**: on enter, the system default input/output are captured and set to
   `systemInputDevice` / `systemOutputDevice` (so a call app aligned on "same as system" follows);

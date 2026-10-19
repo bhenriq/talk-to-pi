@@ -15,7 +15,7 @@ export function getAudioDefaultBinary(): string | null {
   try {
     if (!existsSync(bin) || statSync(src).mtimeMs > statSync(bin).mtimeMs) {
       mkdirSync(binDir, { recursive: true });
-      execSync(`clang -fobjc-arc -framework CoreAudio -framework Foundation -framework AppKit -o "${bin}" "${src}"`, { stdio: "ignore" });
+      execSync(`clang -fobjc-arc -framework CoreAudio -framework Foundation -o "${bin}" "${src}"`, { stdio: "ignore" });
     }
     return existsSync(bin) ? bin : null;
   } catch {

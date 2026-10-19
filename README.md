@@ -68,10 +68,10 @@ A soft two-note audio cue (a gentle low→high blip every ~0.6 s) plays during t
 window, so you can also **hear** that pi is processing. It stops the instant speech starts or
 the mode turns off. Disable it with `audio.processingCue: false`.
 
-In conference mode the cue is played to `audio.cueDevice` instead of the system output. Point it
-at your headphones for a private blip, or at the room Multi-Output (`Pi Talks (Zoom mic)`) so
-meeting participants hear it too — either way it never pollutes the `/listen` tap. Leave it empty
-to fall back to `muteBusyCue`.
+In conference mode the cue rides pi's voice path — `sox` into the room Multi-Output
+(`Pi Talks (Zoom mic)`, your headphones + BlackHole 2ch) — so meeting participants hear the blip
+too, while the `/listen` tap stays clean. Set `conference.muteBusyCue: true` to silence it in
+calls entirely.
 
 ## Listen mode
 
@@ -120,8 +120,8 @@ toggle off — so a call app set to "same as system" follows automatically (no p
   the same time as pi, no mixer is needed).
 - **`/listen` hears everyone.** while conference mode is on, `/listen` also transcribes the
   remote meeting audio (tapped from BlackHole 16ch) alongside your mic.
-- the busy blip plays to `audio.cueDevice` — your headphones for a private blip, or
-  `Pi Talks (Zoom mic)` so the room hears it too — without reaching the transcript tap.
+- the busy blip plays into the room Multi-Output like pi's voice, so participants hear it too
+  (`conference.muteBusyCue: true` silences it).
 
 **One-time setup:**
 
@@ -195,7 +195,7 @@ Edit `config.json`:
 | `promptNudge` | `true` | append a voice-style instruction to the system prompt |
 | `audio.processingCue` | `true` | audible blip while waiting (transcribing/thinking) |
 | `audio.volume` | `0.4` | cue volume (0–1) |
-| `audio.cueDevice` | `` | conference cue destination: headphones (private) or the room Multi-Output |
+
 | `audio.intervalMs` | `650` | pause between cue notes |
 | `listen.model` | `deepgram/nova-3` | OpenRouter STT model |
 | `listen.chunkSeconds` | `5` | transcription chunk size |
@@ -204,7 +204,8 @@ Edit `config.json`:
 | `conference.outputDevice` | `Pi Talks (Zoom mic)` | where pi's TTS plays (headphones + BlackHole 2ch) |
 | `conference.roomDevice` | `BlackHole 2ch` | the virtual device Zoom uses as its microphone |
 | `conference.remoteTapDevice` | `BlackHole 16ch` | remote meeting audio tapped into `/listen` |
-| `conference.relayMic` / `remoteTap` / `muteBusyCue` | `true` | relay, remote tap, and blip mute toggles |
+| `conference.relayMic` / `remoteTap` | `true` | room relays toggles |
+| `conference.muteBusyCue` | `false` | silence the cue in calls (it normally plays into the room) |
 | `conference.systemInputDevice` | `BlackHole 2ch` | system default input while conference is on |
 | `conference.systemOutputDevice` | `Pi Listens (Zoom speaker)` | system default output while conference is on |
 | `conference.switchSystemDevices` | `true` | auto-switch these on enter, restore on exit |

@@ -31,8 +31,7 @@
   "audio": {
     "processingCue": true,
     "volume": 0.4,
-    "intervalMs": 650,
-    "cueDevice": "Pi Talks (Zoom mic)"
+    "intervalMs": 650
   },
   "listen": {
     "model": "deepgram/nova-3",
@@ -54,7 +53,7 @@
     "remoteTapDevice": "BlackHole 16ch",
     "relayMic": true,
     "remoteTap": true,
-    "muteBusyCue": true,
+    "muteBusyCue": false,
     "systemInputDevice": "BlackHole 2ch",
     "systemOutputDevice": "Pi Listens (Zoom speaker)",
     "switchSystemDevices": true

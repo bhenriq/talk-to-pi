@@ -55,13 +55,6 @@ export interface TalkConfig {
     volume: number;
     /** Pause between cue notes, in ms. */
     intervalMs: number;
-    /**
-     * Where the cue plays while conference mode is on. Point it at your
-     * headphones for a private blip, or at the room Multi-Output
-     * (`conference.outputDevice`) so meeting participants hear it too.
-     * Empty = no dedicated route (falls back to `muteBusyCue`).
-     */
-    cueDevice: string;
   };
   listen: {
     model: string;
@@ -100,7 +93,7 @@ export interface TalkConfig {
     relayMic: boolean;
     /** Feed remote meeting audio into /listen while conference mode is on. */
     remoteTap: boolean;
-    /** Silence the busy cue so the room never hears it. */
+    /** Silence the busy cue entirely while conference mode is on (false by default: it plays into the room like pi's voice). */
     muteBusyCue: boolean;
     /** While on, switch the system default input to this device. */
     systemInputDevice: string;
@@ -124,7 +117,7 @@ const DEFAULTS: TalkConfig = {
   },
   input: { key: "space", listenShortcut: "ctrl+shift+l", talkShortcut: "ctrl+shift+t", conferenceShortcut: "ctrl+shift+c", voiceShortcut: "ctrl+shift+o", micDevice: "MacBook Pro Microphone", keyCode: 49, pollMs: 25, repeatSilenceMs: 150, debounceMs: 250, minRecordingMs: 400 },
   promptNudge: true,
-  audio: { processingCue: true, volume: 0.4, intervalMs: 650, cueDevice: "" },
+  audio: { processingCue: true, volume: 0.4, intervalMs: 650 },
   listen: {
     model: "deepgram/nova-3",
     sampleRate: 16000,
@@ -145,7 +138,7 @@ const DEFAULTS: TalkConfig = {
     remoteTapDevice: "BlackHole 16ch",
     relayMic: true,
     remoteTap: true,
-    muteBusyCue: true,
+    muteBusyCue: false,
     systemInputDevice: "BlackHole 2ch",
     systemOutputDevice: "Pi Listens (Zoom speaker)",
     switchSystemDevices: true,
