@@ -103,7 +103,7 @@ const DEFAULTS: TalkConfig = {
     command: "say",
     sayVoice: "auto",
     voice: "rachel",
-    speed: 1.2,
+    speed: 1.0,
     model: "elevenlabs/eleven-flash-v2.5",
     format: "mp3",
   },

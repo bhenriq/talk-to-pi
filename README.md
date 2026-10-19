@@ -125,7 +125,7 @@ on "same as system" and let `/conference` switch the system defaults for you.
 
 ## Voices
 
-The default TTS voice is **rachel** at **1.2×** (ElevenLabs Flash v2.5, through OpenRouter — no extra key).
+The default TTS voice is **rachel** at **1×** (ElevenLabs Flash v2.5, through OpenRouter — no extra key).
 Available curated voices, set via `tts.voice` in `config.json`:
 
 `aria` · `rachel` · `sarah` · `adam` · `antoni` · `george` — or any raw ElevenLabs voice id.
@@ -159,7 +159,7 @@ Edit `config.json`:
 | `tts.provider` | `openrouter` | `openrouter` (cloud) or `say` (offline) |
 | `tts.model` | `elevenlabs/eleven-flash-v2.5` | OpenRouter TTS model |
 | `tts.voice` | `rachel` | voice name or ElevenLabs voice id (cloud) |
-| `tts.speed` | `1.2` | default speed multiplier (0.8–1.2) |
+| `tts.speed` | `1.0` | default speed multiplier (0.8–1.2) |
 | `tts.format` | `mp3` | output format for cloud TTS |
 | `tts.command` | `say` | TTS binary used by the `say` provider |
 | `tts.sayVoice` | `auto` | voice name for the `say` provider |
