@@ -205,9 +205,10 @@ Routes pi into a call app, using `sox -t coreaudio` device targeting (no native 
 - **Remote tap**: `/listen` adds a second capture source (`remoteTapDevice`) while conference mode
   is on, so the transcript includes remote participants as well as your mic. Timestamps are wall-clock,
   interleaving both sources.
-- During conference the busy cue plays through `conference.outputDevice` (sox, the voice path),
-  so participants hear it; the `/listen` remote tap is not on that path. `muteBusyCue` (default
-  false) silences it entirely in calls.
+- During conference the busy cue plays as a continuous loop through `conference.outputDevice`
+  (sox, the voice path) so participants hear it; a single long-lived sox stream means the short
+  notes are not swallowed by the Multi-Output's startup latency, and the `/listen` remote tap is
+  not on that path. `muteBusyCue` (default false) silences it entirely in calls.
 - Status bar shows `🔊 conf: on`. Toggled by `/conference` or `ctrl+shift+c`.
 - **System device switch**: on enter, the system default input/output are captured and set to
   `systemInputDevice` / `systemOutputDevice` (so a call app aligned on "same as system" follows);

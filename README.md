@@ -69,9 +69,10 @@ window, so you can also **hear** that pi is processing. It stops the instant spe
 the mode turns off. Disable it with `audio.processingCue: false`.
 
 In conference mode the cue rides pi's voice path — `sox` into the room Multi-Output
-(`Pi Talks (Zoom mic)`, your headphones + BlackHole 2ch) — so meeting participants hear the blip
-too, while the `/listen` tap stays clean. Set `conference.muteBusyCue: true` to silence it in
-calls entirely.
+(`Pi Talks (Zoom mic)`, your headphones + BlackHole 2ch) — as a continuous loop, since the
+Multi-Output needs a beat to start flowing and would otherwise swallow the short notes.
+Meeting participants hear the blip too, while the `/listen` tap stays clean.
+Set `conference.muteBusyCue: true` to silence it in calls entirely.
 
 ## Listen mode
 
