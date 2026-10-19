@@ -256,6 +256,7 @@ export default function (pi: ExtensionAPI) {
       refreshStatus();
       ctx.ui.notify(`Listening stopped — ${listener.chunkCount} segments transcribed`, "info");
       await offerSaveTranscript(ctx);
+      listener.forget();
     } else {
       listener.start();
       state.listenRecording = true;

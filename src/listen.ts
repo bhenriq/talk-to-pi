@@ -262,15 +262,24 @@ export class Listener {
   stop() {
     for (const s of this.sources) s.stop();
     this.sources = [];
-    this.refreshWidget();
+    // Stopping hides the live transcript from the UI: it is no longer being
+    // recorded, so it must not keep sitting above the editor. The lines stay in
+    // memory so the save prompt can still summarize them.
+    this.clearWidget();
+  }
+
+  /** Drop the transcript lines too (after saving, or on session reset). */
+  forget() {
+    this.lines = [];
+    this.chunkCount = 0;
+    this.filePath = null;
+    this.clearWidget();
   }
 
   /** Kill capture + clear the transcript and widget (used on session reset). */
   reset() {
     this.stop();
-    this.lines = [];
-    this.chunkCount = 0;
-    this.clearWidget();
+    this.forget();
   }
 
   clearWidget() {
@@ -281,6 +290,12 @@ export class Listener {
   refreshWidget() {
     const ui = state.ctx?.ui;
     if (!ui) return;
+    // Never repaint the live transcript once capture has stopped: a late chunk or
+    // a spoken pi reply must not bring the widget back.
+    if (this.sources.length === 0) {
+      ui.setWidget("talk-to-pi-listen", undefined);
+      return;
+    }
     const max = Math.min(10, Math.max(1, this.cfg.listen.widgetLines));
     const lines = this.lines.slice(-max).map((l) => `[${l.t}] ${l.text}`);
     if (lines.length === 0) {
