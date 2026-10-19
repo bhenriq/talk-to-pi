@@ -8,6 +8,7 @@ import { Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { matchesKey } from "@earendil-works/pi-tui";
 import { BusyAudio } from "./src/busy-audio.ts";
+import { HeadsetWatch } from "./src/headset.ts";
 import { loadConfig } from "./src/config.ts";
 import { Listener } from "./src/listen.ts";
 import { Recorder } from "./src/recorder.ts";
@@ -44,6 +45,7 @@ export default function (pi: ExtensionAPI) {
   const speaker = new Speaker(pi, cfg);
   const busyAudio = new BusyAudio(pi, cfg);
   setBusyAudio((active) => busyAudio.setActive(active));
+  const headset = new HeadsetWatch(pi, cfg);
   const speech = new SpeechStream();
   const listener = new Listener(cfg);
   speaker.onSpeak = (text) => {
@@ -437,6 +439,7 @@ export default function (pi: ExtensionAPI) {
       terminalUnsub?.();
       terminalUnsub = ctx.ui.onTerminalInput((data) => onTerminalInput(data));
     }
+    headset.start();
     refreshStatus();
   });
 
@@ -449,6 +452,7 @@ export default function (pi: ExtensionAPI) {
     await restoreSystemDevices();
     terminalUnsub?.();
     terminalUnsub = null;
+    headset.stop();
     clearStatus();
     resetState();
   });

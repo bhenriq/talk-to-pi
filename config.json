@@ -31,7 +31,8 @@
   "audio": {
     "processingCue": true,
     "volume": 0.4,
-    "intervalMs": 650
+    "intervalMs": 650,
+    "headsetDevice": "OpenSwim Pro by Shokz"
   },
   "listen": {
     "model": "deepgram/nova-3",

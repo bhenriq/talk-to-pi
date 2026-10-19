@@ -23,6 +23,41 @@ export function getAudioDefaultBinary(): string | null {
   }
 }
 
+export interface DeviceProbe {
+  present: boolean;
+  alive: boolean;
+  outStreams: number;
+  inStreams: number;
+  rate: number;
+  transport: number;
+}
+
+/**
+ * Ask CoreAudio about one device by name. A Bluetooth headset that is powered off
+ * does not appear in the device list at all, so `present` alone answers
+ * "is my headset connected?"; `alive`/`outStreams` guard the in-between states.
+ */
+export async function probeDevice(pi: ExtensionAPI, name: string): Promise<DeviceProbe | null> {
+  const bin = getAudioDefaultBinary();
+  if (!bin || !name) return null;
+  const res = await pi.exec(bin, ["probe", name]);
+  if (res.code !== 0) return null;
+  const facts: Record<string, string> = {};
+  for (const line of res.stdout.split("\n")) {
+    const i = line.indexOf("=");
+    if (i > 0) facts[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+  }
+  const num = (k: string) => Number(facts[k] ?? 0) || 0;
+  return {
+    present: facts.present === "1",
+    alive: facts.alive === "1",
+    outStreams: num("outStreams"),
+    inStreams: num("inStreams"),
+    rate: num("rate"),
+    transport: num("transport"),
+  };
+}
+
 export async function getDefaultDevice(pi: ExtensionAPI, type: "input" | "output"): Promise<string> {
   const bin = getAudioDefaultBinary();
   if (!bin) throw new Error("audio-default helper unavailable");

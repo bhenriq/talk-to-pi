@@ -12,6 +12,8 @@ export const state = {
   listenRecording: false,
   listenChunks: 0,
   conference: false,
+  /** null = not watched; true/false = watched device present & alive. */
+  headsetConnected: null as boolean | null,
 };
 
 // Voice-wave animation frames shown while waiting (transcribing or thinking).
@@ -108,11 +110,19 @@ function conferenceLabel(): string | undefined {
   return state.conference ? "🔊 conf: on" : undefined;
 }
 
+/** Only shown while a voice mode is on and a headset device is configured. */
+function headsetLabel(): string | undefined {
+  if (state.headsetConnected === null) return undefined;
+  if (!state.enabled && !state.conference) return undefined;
+  return state.headsetConnected ? "🎧 headset: on" : "🎧 headset: off";
+}
+
 export function refreshStatus() {
   ensureAnimation();
   state.ctx?.ui.setStatus("talk-to-pi-talk", talkLabel());
   state.ctx?.ui.setStatus("talk-to-pi-listen", listenLabel());
   state.ctx?.ui.setStatus("talk-to-pi-conf", conferenceLabel());
+  state.ctx?.ui.setStatus("talk-to-pi-headset", headsetLabel());
 }
 
 export function clearStatus() {
@@ -120,4 +130,5 @@ export function clearStatus() {
   state.ctx?.ui.setStatus("talk-to-pi-talk", undefined);
   state.ctx?.ui.setStatus("talk-to-pi-listen", undefined);
   state.ctx?.ui.setStatus("talk-to-pi-conf", undefined);
+  state.ctx?.ui.setStatus("talk-to-pi-headset", undefined);
 }

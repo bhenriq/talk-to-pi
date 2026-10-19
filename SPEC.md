@@ -135,6 +135,7 @@ space again to talk.
 | `promptNudge` | `true` |
 | `audio.processingCue` | `true` |
 | `audio.volume` | `0.4` |
+| `audio.headsetDevice` | `` (this repo: `OpenSwim Pro by Shokz`) |
 
 | `audio.intervalMs` | `650` |
 | `listen.model` | `deepgram/nova-3` |
@@ -210,6 +211,10 @@ Routes pi into a call app, using `sox -t coreaudio` device targeting (no native 
   notes are not swallowed by the Multi-Output's startup latency, and the `/listen` remote tap is
   not on that path. `muteBusyCue` (default false) silences it entirely in calls.
 - Status bar shows `🔊 conf: on`. Toggled by `/conference` or `ctrl+shift+c`.
+- **Headset watch**: while talk or conference is on, `audio.headsetDevice` is probed every 3 s via
+  `audio-default probe` (present + alive + output streams). The footer shows `🎧 headset: on|off`
+  and a transition notifies the user. A switched-off Bluetooth headset is absent from CoreAudio's
+  device list, which is what makes this reliable; no probing happens while both modes are off.
 - **System device switch**: on enter, the system default input/output are captured and set to
   `systemInputDevice` / `systemOutputDevice` (so a call app aligned on "same as system" follows);
   on exit, reload, or shutdown the previous devices are restored (native `audio-default` helper).

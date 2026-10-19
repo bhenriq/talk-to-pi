@@ -68,6 +68,17 @@ A soft two-note audio cue (a gentle low→high blip every ~0.6 s) plays during t
 window, so you can also **hear** that pi is processing. It stops the instant speech starts or
 the mode turns off. Disable it with `audio.processingCue: false`.
 
+The footer also shows `🎧 headset: on` / `🎧 headset: off` while talk or conference mode is on,
+based on whether `audio.headsetDevice` is actually present in CoreAudio (a Bluetooth headset that
+is switched off disappears from the device list). You get a notification when it connects or drops
+mid-session:
+
+```json
+"audio": { "headsetDevice": "OpenSwim Pro by Shokz" }
+```
+
+Set it to `""` to disable the watch entirely (no probing, no footer item).
+
 In conference mode the cue rides pi's voice path — `sox` into the room Multi-Output
 (`Pi Talks (Zoom mic)`, your headphones + BlackHole 2ch) — as a continuous loop, since the
 Multi-Output needs a beat to start flowing and would otherwise swallow the short notes.
@@ -196,6 +207,7 @@ Edit `config.json`:
 | `promptNudge` | `true` | append a voice-style instruction to the system prompt |
 | `audio.processingCue` | `true` | audible blip while waiting (transcribing/thinking) |
 | `audio.volume` | `0.4` | cue volume (0–1) |
+| `audio.headsetDevice` | `` | device watched for the connected/off indicator (empty = off) |
 
 | `audio.intervalMs` | `650` | pause between cue notes |
 | `listen.model` | `deepgram/nova-3` | OpenRouter STT model |

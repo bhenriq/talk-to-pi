@@ -80,10 +80,51 @@ static int setDevice(NSString *type, NSString *name) {
     return 0;
 }
 
+static int probeDevice(NSString *name) {
+    AudioDeviceID found = kAudioObjectUnknown;
+    for (UInt32 i = 0; i < g_count; i++) {
+        NSString *n = deviceName(g_devs[i]);
+        if (!n || ![n isEqualToString:name]) continue;
+        if (found == kAudioObjectUnknown) found = g_devs[i];
+        // prefer the output side of a duplicated name (e.g. a headset)
+        if (hasStreams(g_devs[i], NO)) { found = g_devs[i]; break; }
+    }
+    if (found == kAudioObjectUnknown) {
+        printf("present=0\n");
+        return 0;
+    }
+
+    UInt32 alive = 0, sz = sizeof(alive);
+    AudioObjectPropertyAddress aa = { kAudioDevicePropertyDeviceIsAlive, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain };
+    AudioObjectGetPropertyData(found, &aa, 0, NULL, &sz, &alive);
+
+    UInt32 transport = 0; sz = sizeof(transport);
+    AudioObjectPropertyAddress ta = { kAudioDevicePropertyTransportType, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain };
+    AudioObjectGetPropertyData(found, &ta, 0, NULL, &sz, &transport);
+
+    Float64 rate = 0; sz = sizeof(rate);
+    AudioObjectPropertyAddress ra = { kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain };
+    AudioObjectGetPropertyData(found, &ra, 0, NULL, &sz, &rate);
+
+    UInt32 outSz = 0, inSz = 0;
+    AudioObjectPropertyAddress so = { kAudioDevicePropertyStreams, kAudioDevicePropertyScopeOutput, kAudioObjectPropertyElementMain };
+    if (AudioObjectGetPropertyDataSize(found, &so, 0, NULL, &outSz) != noErr) outSz = 0;
+    AudioObjectPropertyAddress si = { kAudioDevicePropertyStreams, kAudioDevicePropertyScopeInput, kAudioObjectPropertyElementMain };
+    if (AudioObjectGetPropertyDataSize(found, &si, 0, NULL, &inSz) != noErr) inSz = 0;
+
+    printf("present=1\n");
+    printf("alive=%d\n", alive == 1 ? 1 : 0);
+    printf("outStreams=%u\n", (unsigned)(outSz / sizeof(AudioStreamID)));
+    printf("inStreams=%u\n", (unsigned)(inSz / sizeof(AudioStreamID)));
+    printf("rate=%.0f\n", rate);
+    printf("transport=%u\n", (unsigned)transport);
+    return 0;
+}
+
 int main(int argc, const char *argv[]) {
     @autoreleasepool {
         if (argc < 3) {
-            fprintf(stderr, "usage: audio-default get|set input|output [device-name]\n");
+            fprintf(stderr, "usage: audio-default get|set input|output [device-name] | probe <device-name>\n");
             return 1;
         }
         AudioObjectPropertyAddress a = { kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain };
@@ -94,6 +135,11 @@ int main(int argc, const char *argv[]) {
         AudioObjectGetPropertyData(kAudioObjectSystemObject, &a, 0, NULL, &sz, g_devs);
 
         NSString *cmd = [NSString stringWithUTF8String:argv[1]];
+        if ([cmd isEqualToString:@"probe"]) {
+            int prc = probeDevice([NSString stringWithUTF8String:argv[2]]);
+            free(g_devs);
+            return prc;
+        }
         NSString *type = [NSString stringWithUTF8String:argv[2]];
         if (![type isEqualToString:@"input"] && ![type isEqualToString:@"output"]) {
             fprintf(stderr, "type must be input or output\n");
