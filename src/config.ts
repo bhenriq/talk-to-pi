@@ -55,6 +55,11 @@ export interface TalkConfig {
     volume: number;
     /** Pause between cue notes, in ms. */
     intervalMs: number;
+    /**
+     * Private output device for the cue while conference mode is on, so you hear
+     * it but neither BlackHole tap picks it up. Empty = no private route.
+     */
+    cueDevice: string;
   };
   listen: {
     model: string;
@@ -117,7 +122,7 @@ const DEFAULTS: TalkConfig = {
   },
   input: { key: "space", listenShortcut: "ctrl+shift+l", talkShortcut: "ctrl+shift+t", conferenceShortcut: "ctrl+shift+c", voiceShortcut: "ctrl+shift+o", micDevice: "MacBook Pro Microphone", keyCode: 49, pollMs: 25, repeatSilenceMs: 150, debounceMs: 250, minRecordingMs: 400 },
   promptNudge: true,
-  audio: { processingCue: true, volume: 0.4, intervalMs: 650 },
+  audio: { processingCue: true, volume: 0.4, intervalMs: 650, cueDevice: "" },
   listen: {
     model: "deepgram/nova-3",
     sampleRate: 16000,
