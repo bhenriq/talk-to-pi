@@ -146,6 +146,8 @@ export default function (pi: ExtensionAPI) {
       if (!text) {
         state.ctx?.ui.notify("No speech detected", "warning");
       } else {
+        // Mirror pi's "pi:" label for the user's push-to-talk utterance.
+        if (state.listenRecording) listener.addUserLine(text);
         pi.sendUserMessage(text);
       }
     } catch (err) {
@@ -261,6 +263,16 @@ export default function (pi: ExtensionAPI) {
     // Listen toggle works regardless of talk mode.
     if (matchesKey(data, cfg.input.listenShortcut)) {
       if (state.ctx) void toggleListen(state.ctx);
+      return { consume: true };
+    }
+    // Show/hide the live transcript widget while /listen is on.
+    if (matchesKey(data, cfg.input.transcriptShortcut)) {
+      if (state.listenRecording) {
+        const hidden = listener.toggleWidget();
+        state.ctx?.ui.notify(hidden ? "Transcript hidden" : "Transcript shown", "info");
+      } else {
+        state.ctx?.ui.notify("Listen mode is off — nothing to show", "info");
+      }
       return { consume: true };
     }
     // Talk toggle.
@@ -606,6 +618,8 @@ export default function (pi: ExtensionAPI) {
       }
       pendingSay = cfg.say.mode;
       attach(ctx);
+      // Record the typed /say in the live meeting notes as a user line.
+      if (state.listenRecording) listener.addUserLine(text);
       pi.sendUserMessage(text);
     },
   });

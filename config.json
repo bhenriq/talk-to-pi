@@ -29,6 +29,7 @@
     ],
     "listenShortcut": "ctrl+shift+l",
     "talkShortcut": "ctrl+shift+t",
+    "transcriptShortcut": "ctrl+shift+m",
     "conferenceShortcut": "ctrl+shift+c",
     "voiceShortcut": "ctrl+shift+o",
     "micDevice": "MacBook Pro Microphone",
@@ -60,7 +61,7 @@
     "summaryModel": "deepseek/deepseek-chat"
   },
   "say": {
-    "mode": "approval"
+    "mode": "auto"
   },
   "conference": {
     "roomDevice": "BlackHole 2ch",

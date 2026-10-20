@@ -15,7 +15,8 @@ export function slugify(s: string): string {
 export async function summarizeMeeting(cfg: TalkConfig, transcript: string): Promise<{ slug: string; summary: string }> {
   const truncated = transcript.length > 8000 ? transcript.slice(-8000) : transcript;
   const prompt =
-    "Here is a meeting transcript (HH:MM:SS per line; lines prefixed \"pi:\" are the assistant).\n" +
+    "Here is a meeting transcript (HH:MM:SS per line). Speaker labels: \"me:\" = the user's microphone, " +
+    "\"room:\" = remote meeting audio, \"pi:\" = the assistant.\n" +
     "Produce a SHORT slug (3-6 words, kebab-case) summarizing the meeting, and a concise summary of 3-5 bullets.\n" +
     "Respond with the slug on the first line starting with \"SLUG:\", then bullet points each on their own line starting with \"- \":\n\n" +
     "Transcript:\n" +

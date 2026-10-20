@@ -33,6 +33,7 @@ Restart pi (or run `/reload`), then type `/talk`.
 | **F5** | while pi is speaking | interrupt + start recording (barge-in) |
 | `ctrl+shift+t` | any time | toggle `/talk` |
 | `ctrl+shift+l` | any time | toggle `/listen` |
+| `ctrl+shift+m` | while listening | show/hide the live transcript widget |
 | `ctrl+shift+c` | any time | toggle `/conference` |
 | `ctrl+shift+o` | any time | open voice, speed & `/say` menu |
 | **release** | recording | stop, transcribe, submit |
@@ -105,8 +106,8 @@ The running transcript is appended to a Markdown file and made available to pi:
   When the accumulated verbatim text passes `listen.contextWindowChars`, it collapses into a recap.
 - the **`listen_transcript` tool** lets pi search the whole transcript for older content.
 
-While listening, pi's own spoken answers are appended too, labeled `pi:` — pi is the only
-identified speaker (everyone else is unlabeled).
+While listening, each line is labeled by its source: `me:` for your microphone, `pi:` for pi's
+own spoken answers, and `room:` for the conference app's remote audio (in conference mode).
 
 `/listen` (or `ctrl+shift+l`) toggles recording; the footer shows `📝 listen: recording · N segments`.
 The most recent transcript lines stream in a widget above the editor.
@@ -240,6 +241,7 @@ Edit `config.json`:
 | `input.talkTerminalApps` | (terminals) | frontmost-app bundle ids where the talk key counts |
 | `input.listenShortcut` | `ctrl+shift+l` | toggle `/listen` |
 | `input.talkShortcut` | `ctrl+shift+t` | toggle `/talk` |
+| `input.transcriptShortcut` | `ctrl+shift+m` | show/hide live transcript widget |
 | `input.conferenceShortcut` | `ctrl+shift+c` | toggle `/conference` |
 | `input.voiceShortcut` | `ctrl+shift+o` | open voice & speed menu |
 | `input.micDevice` | `MacBook Pro Microphone` | the mic always used for talk + `/listen` (never the headset mic) |

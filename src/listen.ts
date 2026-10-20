@@ -116,6 +116,8 @@ export class Listener {
   private injectedAt = 0;
   /** Approximate verbatim chars currently in context (reset when a recap collapses them). */
   injectedChars = 0;
+  /** Manual hide of the live transcript widget (toggled by ctrl+shift+m). */
+  private widgetHidden = false;
 
   filePath = "";
   chunkCount = 0;
@@ -149,6 +151,7 @@ export class Listener {
     this.chunkCount = 0;
     this.injectedAt = 0;
     this.injectedChars = 0;
+    this.widgetHidden = false;
     this.savedPath = null; // a new session replaces the searchable transcript
     this.startAt = Date.now();
 
@@ -180,7 +183,7 @@ export class Listener {
     const m = this.cfg.listen;
     const src = new CaptureSource(
       this.bytesPerChunk,
-      (pcm) => this.handleChunk(pcm),
+      (pcm) => this.handleChunk(pcm, remote),
       (msg) => state.ctx?.ui.notify(`Listen recording failed: ${msg}`, "error"),
       remote,
     );
@@ -206,7 +209,11 @@ export class Listener {
     return d.startsWith("~") ? join(homedir(), d.slice(1)) : d;
   }
 
-  private handleChunk(pcm: Buffer) {
+  private handleChunk(pcm: Buffer, remote: boolean) {
+    // While the user is push-to-talk recording (or that utterance is being transcribed),
+    // skip the MIC source — the talk path adds a labeled "me:" line instead. The remote
+    // tap keeps flowing so the room is still transcribed.
+    if (!remote && (state.recording || state.transcribing)) return;
     const t = this.formatTime((Date.now() - this.startAt) / 1000);
     if (this.cfg.listen.skipSilence && pcmWindowRms(pcm, this.cfg.listen.sampleRate) < this.cfg.listen.silenceThreshold) {
       return; // genuinely silent: no 100 ms window has energy
@@ -215,10 +222,10 @@ export class Listener {
       wavHeader(pcm.length, this.cfg.listen.sampleRate, this.cfg.listen.channels, this.cfg.listen.bits),
       pcm,
     ]);
-    this.queue = this.queue.then(() => this.transcribe(wav, t)).catch(() => {});
+    this.queue = this.queue.then(() => this.transcribe(wav, t, remote)).catch(() => {});
   }
 
-  private async transcribe(wav: Buffer, t: string) {
+  private async transcribe(wav: Buffer, t: string, remote: boolean) {
     try {
       const json: any = await this.transcribeRequest(wav);
       if (!json) return; // dropped after retries
@@ -228,10 +235,12 @@ export class Listener {
       }
       const text = String(json?.text ?? "").trim();
       if (!text) return;
-      this.lines.push({ t, text });
+      const label = remote ? "room" : "me";
+      const line = `${label}: ${text}`;
+      this.lines.push({ t, text: line });
       this.chunkCount++;
       try {
-        appendFileSync(this.filePath, `[${t}] ${text}\n`);
+        appendFileSync(this.filePath, `[${t}] ${line}\n`);
       } catch {
         // persistence is best-effort
       }
@@ -297,6 +306,7 @@ export class Listener {
     this.chunkCount = 0;
     this.injectedAt = 0;
     this.injectedChars = 0;
+    this.widgetHidden = false;
     this.filePath = null;
     this.clearWidget();
   }
@@ -333,10 +343,21 @@ export class Listener {
     state.ctx?.ui.setWidget("talk-to-pi-listen", undefined);
   }
 
+  /** Show/hide the live transcript widget; returns true when now hidden. */
+  toggleWidget(): boolean {
+    this.widgetHidden = !this.widgetHidden;
+    this.refreshWidget();
+    return this.widgetHidden;
+  }
+
   /** Show only the recent transcript lines (status bar is the listening indicator). */
   refreshWidget() {
     const ui = state.ctx?.ui;
     if (!ui) return;
+    if (this.widgetHidden) {
+      ui.setWidget("talk-to-pi-listen", undefined);
+      return;
+    }
     // Never repaint the live transcript once capture has stopped: a late chunk or
     // a spoken pi reply must not bring the widget back.
     if (this.sources.length === 0) {
@@ -354,13 +375,22 @@ export class Listener {
 
   /** Append pi's spoken sentence to the transcript (the speaker is known exactly). */
   addPiLine(text: string) {
+    this.addLabelledLine("pi", text);
+  }
+
+  /** Append the user's push-to-talk utterance, labelled like pi's replies. */
+  addUserLine(text: string) {
+    this.addLabelledLine("me", text);
+  }
+
+  private addLabelledLine(label: string, text: string) {
     if (!this.filePath) return; // no active transcript file
     const line = text.trim();
     if (!line) return;
     const t = this.formatTime((Date.now() - this.startAt) / 1000);
-    this.lines.push({ t, text: `pi: ${line}` });
+    this.lines.push({ t, text: `${label}: ${line}` });
     try {
-      appendFileSync(this.filePath, `[${t}] pi: ${line}\n`);
+      appendFileSync(this.filePath, `[${t}] ${label}: ${line}\n`);
     } catch {
       // persistence is best-effort
     }

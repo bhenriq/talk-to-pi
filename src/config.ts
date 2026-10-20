@@ -45,6 +45,8 @@ export interface TalkConfig {
     listenShortcut: string;
     /** Keyboard shortcut to toggle /talk mode. */
     talkShortcut: string;
+    /** Keyboard shortcut to show/hide the live transcript widget while /listen is on. */
+    transcriptShortcut: string;
     /** Keyboard shortcut to toggle /conference mode. */
     conferenceShortcut: string;
     /** Keyboard shortcut to open the voice & speed menu. */
@@ -162,6 +164,7 @@ const DEFAULTS: TalkConfig = {
     ],
     listenShortcut: "ctrl+shift+l",
     talkShortcut: "ctrl+shift+t",
+    transcriptShortcut: "ctrl+shift+m",
     conferenceShortcut: "ctrl+shift+c",
     voiceShortcut: "ctrl+shift+o",
     micDevice: "MacBook Pro Microphone",

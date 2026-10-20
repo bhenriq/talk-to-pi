@@ -2,7 +2,7 @@
 
 A pi extension that adds a `/talk` mode: **hold F5 to speak** (or **type `/say`**), pi answers **out loud**.
 
-Status: implemented. `/talk`, `/say`, `/listen` (pi-labeled lines + summary save-on-stop), and `/conference`
+Status: implemented. `/talk`, `/say`, `/listen` (me/pi/room-labeled lines + summary save-on-stop), and `/conference`
 (BlackHole routing + system-device switch) are wired and smoke-tested; push-to-talk, STT/TTS, the
 transcript pipeline, and the save-with-summary flow verified live. Conference routing is verified
 against the installed BlackHole devices but still warrants a real-call shakedown.
@@ -130,6 +130,7 @@ the talk key again to talk.
 | `input.minRecordingMs` | `400` |
 | `input.listenShortcut` | `ctrl+shift+l` |
 | `input.talkShortcut` | `ctrl+shift+t` |
+| `input.transcriptShortcut` | `ctrl+shift+m` (show/hide live transcript widget) |
 | `input.conferenceShortcut` | `ctrl+shift+c` |
 | `input.voiceShortcut` | `ctrl+shift+o` |
 | `input.micDevice` | `MacBook Pro Microphone` |
@@ -200,8 +201,8 @@ A separate, listen-only mode. `/listen` or the `ctrl+shift+l` shortcut toggles i
 - Listen mode is independent of talk mode and does not trigger TTS or the busy cue.
 - Footer shows `📝 listen: recording · N segments`; a widget above the editor shows only the last
   `listen.widgetLines` transcript lines (status bar is the sole listening indicator).
-- pi's own spoken answers are appended as `pi: …` lines (exact text, no STT) while listening;
-  pi is the only identified speaker, other lines are unlabeled.
+- every line is labeled by source: `me:` (your microphone), `room:` (remote meeting audio), or
+  `pi:` (pi's own spoken answers, exact text, no STT) while listening.
 - **On stop**, pi offers to save a finalized Markdown file: an LLM summary at the top and filename
   `YYYY-MM-DD_<title>.md` — a `date_title` filename where the title is a short summary of the
   conversation; declining keeps the raw file.
