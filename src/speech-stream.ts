@@ -1,6 +1,15 @@
-// Incremental markdown → speech text, with fenced-code-block skipping and
-// sentence splitting. `feed()` receives the full accumulated assistant text and
-// returns newly completed sentences.
+// Incremental markdown → speech text.
+//
+// `feed()` receives the FULL accumulated assistant text on every update and
+// re-cleans the whole thing from scratch, then only emits sentences it has not
+// emitted yet. Re-cleaning the full text (instead of diffing stream deltas)
+// means chunk boundaries can never corrupt a word: "Octo" + "puses" is cleaned as
+// one pass over the joined text, so it stays "Octopuses".
+
+/** Remove the space streaming tokenizers leave before punctuation. */
+function cleanPunctuation(s: string): string {
+  return s.replace(/\s+([,.!?;:])/g, "$1").trim();
+}
 
 function cleanLine(line: string): string {
   let s = line;
@@ -15,90 +24,78 @@ function cleanLine(line: string): string {
   s = s.replace(/!\[[^\]]*\]\([^)]*\)/g, ""); // images -> nothing
   s = s.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1"); // links -> text
   s = s.replace(/\|/g, " "); // table pipes
-  s = s.replace(/\s+/g, " "); // collapse whitespace
+  // Collapse whitespace and drop the space streamed before punctuation.
+  s = s.replace(/\s+/g, " ").replace(/\s+([,.!?;:])/g, "$1").trim();
   return s;
 }
 
+/** Stateless clean of the whole raw markdown text (fences stripped, lines joined). */
+function cleanFull(raw: string): string {
+  let out = "";
+  let inFence = false;
+  for (const line of raw.split("\n")) {
+    if (/^\s*```/.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    const cleaned = cleanLine(line);
+    if (cleaned) out += cleaned + " ";
+  }
+  return out.replace(/\s+/g, " ").trim();
+}
+
 export class SpeechStream {
-  private buf = "";
-  private inFence = false;
-  private rawLen = 0;
-  private started = false;
-  private scanFrom = 0;
+  private cleaned = "";
+  private emitted = 0; // index in `cleaned` up to which sentences were already emitted
 
   reset() {
-    this.buf = "";
-    this.inFence = false;
-    this.rawLen = 0;
-    this.started = false;
-    this.scanFrom = 0;
+    this.cleaned = "";
+    this.emitted = 0;
   }
 
-  /** Feed the full accumulated raw assistant text; returns finished sentences. */
+  /** Feed the full accumulated raw assistant text; returns newly finished sentences. */
   feed(rawFull: string): string[] {
-    if (!this.started) {
-      this.started = true;
-      this.rawLen = 0;
-    }
-    const tail = rawFull.slice(this.rawLen);
-    this.rawLen = rawFull.length;
-    this.buf += this.stripTail(tail);
-    return this.extractSentences();
+    this.cleaned = cleanFull(rawFull);
+    return this.extractNewSentences();
   }
 
-  /** Flush whatever remains (no trailing punctuation) as a final sentence. */
+  /** Flush whatever remains (possibly without trailing punctuation) as a final sentence. */
   flush(): string[] {
-    const out = this.extractSentences();
-    const rest = this.buf.trim();
-    this.buf = "";
-    this.scanFrom = 0;
+    const out = this.extractNewSentences();
+    const rest = cleanPunctuation(this.cleaned.slice(this.emitted));
+    this.emitted = this.cleaned.length;
     if (rest) out.push(rest);
     return out;
   }
 
-  private stripTail(s: string): string {
-    let out = "";
-    for (const line of s.split("\n")) {
-      if (/^\s*```/.test(line)) {
-        this.inFence = !this.inFence;
-        continue;
-      }
-      if (this.inFence) continue;
-      out += cleanLine(line) + " ";
-    }
-    return out;
-  }
-
-  private extractSentences(): string[] {
+  /** Emit complete sentences that start after `emitted` and end in punctuation. */
+  private extractNewSentences(): string[] {
     const out: string[] = [];
     let guard = 0;
+    let from = this.emitted;
     while (guard++ < 400) {
       const re = /[.!?]+/g;
-      re.lastIndex = this.scanFrom;
-      const m = re.exec(this.buf);
-      if (!m) {
-        // No (more) punctuation: nothing to split. Trim waste whitespace.
-        this.buf = this.buf.replace(/^[ \t]+/, "");
-        this.scanFrom = 0;
-        break;
-      }
+      re.lastIndex = from;
+      const m = re.exec(this.cleaned);
+      if (!m) break;
       const end = m.index + m[0].length;
-      const after = this.buf.slice(end);
+      const after = this.cleaned.slice(end);
       if (after.trim() === "") {
-        // Trailing punctuation: re-examine this same punctuation once more text arrives.
-        this.scanFrom = m.index;
+        // Trailing punctuation: wait for more text before deciding it is a full stop.
         break;
       }
-      const capitalized = /^[ \t]*[A-Z0-9"“'(>]/.test(after);
-      if (capitalized) {
-        out.push(this.buf.slice(0, end).trim());
-        this.buf = after.replace(/^[ \t]+/, "");
-        this.scanFrom = 0;
-      } else {
-        // Likely abbreviation/decimal (e.g. "e.g.", "3.14"): skip and keep scanning.
-        this.scanFrom = end;
+      const capitalized = /^[ \t]*[A-Z0-9""'(>]/.test(after);
+      if (!capitalized) {
+        // Abbreviation/decimal (e.g. "e.g.", "3.14"): keep scanning.
+        from = end;
+        continue;
       }
+      const sentence = cleanPunctuation(this.cleaned.slice(this.emitted, end));
+      this.emitted = end;
+      from = end;
+      if (sentence) out.push(sentence);
     }
-    return out.filter((s) => s.length > 0);
+    return out;
   }
 }
