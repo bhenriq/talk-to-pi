@@ -112,6 +112,10 @@ export class Listener {
   /** Where the last finished transcript lives, so it stays readable after /listen stops. */
   savedPath: string | null = null;
   private startAt = 0;
+  /** Index of the first transcript line not yet injected into context. */
+  private injectedAt = 0;
+  /** Approximate verbatim chars currently in context (reset when a recap collapses them). */
+  injectedChars = 0;
 
   filePath = "";
   chunkCount = 0;
@@ -125,6 +129,16 @@ export class Listener {
     return this.lines.map((l) => `[${l.t}] ${l.text}`).join("\n");
   }
 
+  /** Transcript lines since the last context injection (doesn't advance the cursor). */
+  pendingDeltaText(): string {
+    return this.lines.slice(this.injectedAt).map((l) => `[${l.t}] ${l.text}`).join("\n");
+  }
+
+  /** Mark everything up to here as injected into context. */
+  markInjected(): void {
+    this.injectedAt = this.lines.length;
+  }
+
   get startTime(): number {
     return this.startAt;
   }
@@ -133,6 +147,8 @@ export class Listener {
     if (this.sources.length > 0) return;
     this.lines = [];
     this.chunkCount = 0;
+    this.injectedAt = 0;
+    this.injectedChars = 0;
     this.savedPath = null; // a new session replaces the searchable transcript
     this.startAt = Date.now();
 
@@ -279,6 +295,8 @@ export class Listener {
     if (this.filePath) this.savedPath = this.filePath;
     this.lines = [];
     this.chunkCount = 0;
+    this.injectedAt = 0;
+    this.injectedChars = 0;
     this.filePath = null;
     this.clearWidget();
   }

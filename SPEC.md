@@ -154,7 +154,7 @@ the talk key again to talk.
 | `listen.chunkSeconds` | `5` |
 | `listen.skipSilence` / `silenceThreshold` | `true` / `0.005` |
 | `listen.outputDir` | `~/.pi/listen` |
-| `listen.contextWindowChars` | `6000` |
+| `listen.contextWindowChars` | `6000` (max verbatim transcript in context before recap) |
 | `listen.widgetLines` | `8` |
 | `listen.summaryModel` | `deepseek/deepseek-chat` |
 | `listen.contextMode` | `summary` (or `full` / `none`) |
@@ -192,9 +192,11 @@ A separate, listen-only mode. `/listen` or the `ctrl+shift+l` shortcut toggles i
 - Each speaking chunk is transcribed via OpenRouter `/api/v1/audio/transcriptions`
   (`listen.model`, default `deepgram/nova-3`), ~5 s behind real time. No diarization.
 - Transcript accumulates in memory and is appended to a Markdown file in `listen.outputDir`.
-- **Context**: the last `contextWindowChars` of the transcript is injected into the system
-  prompt on every turn (a `listen_transcript` prompt section); a model-callable
-  `listen_transcript` tool searches the full transcript for older content.
+- **Context**: instead of rewriting a system-prompt section every turn, what was said **since the
+  last turn** is appended as an invisible tail message (peek: `meeting-transcript`). When the
+  accumulated verbatim text passes `listen.contextWindowChars`, it collapses into a `meeting-recap`
+  message first. A model-callable `listen_transcript` tool searches the full transcript for older
+  content.
 - Listen mode is independent of talk mode and does not trigger TTS or the busy cue.
 - Footer shows `📝 listen: recording · N segments`; a widget above the editor shows only the last
   `listen.widgetLines` transcript lines (status bar is the sole listening indicator).

@@ -87,7 +87,7 @@ export interface TalkConfig {
     silenceThreshold: number;
     /** Directory for persisted transcripts. `~` expands to the home directory. */
     outputDir: string;
-    /** How much of the recent transcript to inject into the system prompt. */
+    /** Max verbatim transcript chars accumulated in context before they are collapsed into a recap. */
     contextWindowChars: number;
     /** How many recent transcript lines to show in the live footer widget (max 10). */
     widgetLines: number;

@@ -395,6 +395,45 @@ export default function (pi: ExtensionAPI) {
     return transcript.split("\n").slice(0, max).join("\n");
   }
 
+  // ── Incremental meeting context ─────────────────────────────────────────────
+  // Instead of rewriting a system-prompt section every turn (which destroyed prompt
+  // caching), append only what was said since the last turn as a tail message. Once
+  // the accumulated verbatim transcript exceeds `listen.contextWindowChars`, collapse
+  // it into a recap so the context stays bounded.
+
+  let injectingMeeting = false;
+
+  async function injectMeetingDelta() {
+    if (injectingMeeting || !state.listenRecording) return;
+    const delta = listener.pendingDeltaText();
+    if (!delta.trim()) return;
+    injectingMeeting = true;
+    try {
+      const cap = cfg.listen.contextWindowChars;
+      if (listener.injectedChars + delta.length > cap) {
+        const recap = await summarizeMeeting(cfg, listener.transcriptText);
+        listener.injectedChars = 0;
+        await pi.sendMessage(
+          { customType: "meeting-recap", content: `Meeting recap so far:\n${recap.summary}`, display: false },
+          { triggerTurn: false },
+        );
+      } else {
+        listener.injectedChars += delta.length;
+        await pi.sendMessage(
+          { customType: "meeting-transcript", content: delta, display: false },
+          { triggerTurn: false },
+        );
+      }
+      listener.markInjected();
+    } catch (err) {
+      // Best-effort: never break a turn over context injection.
+      const msg = err instanceof Error ? err.message : String(err);
+      state.ctx?.ui.notify(`Could not add meeting transcript to context: ${msg}`, "warning");
+    } finally {
+      injectingMeeting = false;
+    }
+  }
+
   async function toggleListen(ctx: ExtensionContext) {
     if (ctx.mode !== "tui") {
       ctx.ui.notify("Listen mode requires the interactive terminal", "error");
@@ -658,6 +697,8 @@ export default function (pi: ExtensionAPI) {
       sayMode = false;
       if (!state.enabled && !ev.aborted && sentences.length > 0) void approveSay(ctx, sentences);
     }
+    // Fold what was heard since the last turn into context (append-only, tail).
+    void injectMeetingDelta();
     refreshStatus();
   });
 
@@ -695,13 +736,7 @@ export default function (pi: ExtensionAPI) {
       const guidelines = ev.systemPromptOptions?.promptGuidelines;
       if (Array.isArray(guidelines)) guidelines.push(VOICE_NUDGE);
     }
-    const transcript = listener.transcriptText;
-    if (transcript && transcript.trim()) {
-      ev.systemPromptOptions.sections["listen_transcript"] =
-        "A meeting is being (or was recently) recorded and transcribed from the microphone. " +
-        "The most recent transcript follows (HH:MM:SS per line, oldest first). Use it to answer questions about " +
-        "the meeting; for anything older than what is shown, call the listen_transcript tool.\n\n" +
-        listener.recent(cfg.listen.contextWindowChars);
-    }
+    // Meeting transcript is no longer injected here (that rewrite every turn wrecked
+    // prompt caching). It is appended incrementally as tail messages instead.
   });
 }

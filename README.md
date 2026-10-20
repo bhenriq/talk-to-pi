@@ -100,7 +100,9 @@ Set `conference.muteBusyCue: true` to silence it in calls entirely.
 OpenRouter's `/audio/transcriptions` endpoint (default `deepgram/nova-3`), skipping silence.
 The running transcript is appended to a Markdown file and made available to pi:
 
-- the **most recent part** is injected into the system prompt on every turn, and
+- **what was said since the last turn** is appended as an invisible tail message, so pi's
+  meeting context grows incrementally without rewriting the system prompt (prompt-cache friendly).
+  When the accumulated verbatim text passes `listen.contextWindowChars`, it collapses into a recap.
 - the **`listen_transcript` tool** lets pi search the whole transcript for older content.
 
 While listening, pi's own spoken answers are appended too, labeled `pi:` — pi is the only
@@ -268,7 +270,7 @@ Edit `config.json`:
 | `conference.muteBusyCue` | `false` | silence the cue in calls (it normally plays into the room) |
 | `conference.systemInputDevice` | `BlackHole 2ch` | system default input while conference is on |
 | `conference.switchSystemDevices` | `true` | auto-switch system devices on enter; on exit output → direct headset/speaker, input → built-in mic |
-| `listen.contextWindowChars` | `6000` | recent transcript injected into the prompt |
+| `listen.contextWindowChars` | `6000` | max verbatim transcript kept in context before it collapses to a recap |
 | `listen.widgetLines` | `8` | transcript lines shown above the editor |
 | `listen.summaryModel` | `deepseek/deepseek-chat` | model that writes the save-time summary + title |
 | `listen.contextMode` | `summary` | what stays in context on stop: `summary`, `full`, `none` |
