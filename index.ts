@@ -183,9 +183,17 @@ export default function (pi: ExtensionAPI) {
       if (state.ctx) setEnabled(!state.enabled, state.ctx);
       return { consume: true };
     }
-    if (!state.enabled) return undefined;
-    const isSpace = matchesKey(data, cfg.input.key);
     const isEsc = matchesKey(data, "escape");
+    if (!state.enabled) {
+      // /say runs with talk mode off: Esc interrupts it too (cut speech + abort).
+      if (isEsc && (state.busy || state.speaking)) {
+        speaker.stop();
+        if (state.busy) state.ctx?.abort();
+        return { consume: true };
+      }
+      return undefined;
+    }
+    const isSpace = matchesKey(data, cfg.input.key);
     if (!isSpace && !isEsc) return undefined;
 
     if (isEsc) {
