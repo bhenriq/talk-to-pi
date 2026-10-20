@@ -287,15 +287,20 @@ export default function (pi: ExtensionAPI) {
     if (state.recording && recorder) {
       recorder.cancel();
       recorder = null;
-    } else if (state.transcribing) {
-      // Ignore: transcription is already in flight.
-    } else if (state.busy || state.speaking) {
+      return { consume: true };
+    }
+    if (state.transcribing) {
+      // Brief submit window — don't steal pi-vim's Esc.
+      return undefined;
+    }
+    if (state.busy || state.speaking) {
       // Cut the AI short / interrupt speech (works even while the queued TTS is still reading).
       speaker.stop();
       if (state.busy) state.ctx?.abort();
+      return { consume: true };
     }
-    // Idle: nothing — Esc never exits a mode; only /talk, /listen and the shortcuts toggle modes.
-    return { consume: true };
+    // Idle: let Esc reach pi-vim/editor. Esc still never exits talk mode.
+    return undefined;
   }
 
   function attach(ctx: ExtensionContext) {

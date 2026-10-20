@@ -173,9 +173,10 @@ the talk key again to talk.
   the relay, and all timers on shutdown and on `/talk` off; on shutdown put the system input back to the
   built-in mic and the system output on a direct device (headset or built-in speakers), never a Multi-Output.
 - Keyboard capture via `ctx.ui.onTerminalInput()`, which intercepts raw keys **before** the editor.
-  Consume only Esc while talk mode is on (the talk key itself is polled natively); return `undefined`
-  for everything else so normal editing — including pi-vim and Space — is untouched. **No editor
-  replacement, so pi-vim coexists without loss.**
+  Consume Esc only while it cancels a recording or interrupts speech; the talk key itself is polled
+  natively and only consumed in the terminal so it never reaches the editor. Return `undefined` for
+  everything else so normal editing — including pi-vim, Space, and Esc-when-idle — is untouched.
+  **No editor replacement, so pi-vim coexists without loss.**
 - **Unsent editor text** is left untouched: a voiced transcript always auto-submits as its own message.
 - Track busy state from `agent_start` / `agent_end` / `agent_settled`.
 - Terminal-only behavior guarded by `ctx.mode === "tui"`; the extension must not break non-interactive modes.
