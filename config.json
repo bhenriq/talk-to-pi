@@ -32,7 +32,8 @@
     "processingCue": true,
     "volume": 0.4,
     "intervalMs": 650,
-    "headsetDevice": "OpenSwim Pro by Shokz"
+    "headsetDevice": "OpenSwim Pro by Shokz",
+    "localSpeaker": "MacBook Pro Speakers"
   },
   "listen": {
     "model": "deepgram/nova-3",
@@ -49,10 +50,9 @@
     "summaryModel": "deepseek/deepseek-chat"
   },
   "say": {
-    "mode": "auto"
+    "mode": "approval"
   },
   "conference": {
-    "outputDevice": "Pi Talks (Zoom mic)",
     "roomDevice": "BlackHole 2ch",
     "remoteTapDevice": "BlackHole 16ch",
     "relayMic": true,
@@ -61,7 +61,14 @@
     "remoteTap": true,
     "muteBusyCue": false,
     "systemInputDevice": "BlackHole 2ch",
-    "systemOutputDevice": "Pi Listens (Zoom speaker)",
-    "switchSystemDevices": true
+    "switchSystemDevices": true,
+    "headset": {
+      "voiceDevice": "Pi Talks (headset)",
+      "systemOutputDevice": "Pi Listens (headset)"
+    },
+    "builtin": {
+      "voiceDevice": "Pi Talks (speaker)",
+      "systemOutputDevice": "Pi Listens (speaker)"
+    }
   }
 }

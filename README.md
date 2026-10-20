@@ -88,7 +88,7 @@ mid-session:
 Set it to `""` to disable the watch entirely (no probing, no footer item).
 
 In conference mode the cue rides pi's voice path — `sox` into the room Multi-Output
-(`Pi Talks (Zoom mic)`, your headphones + BlackHole 2ch) — as a continuous loop, since the
+(`Pi Talks (headset)`, your headphones + BlackHole 2ch) — as a continuous loop, since the
 Multi-Output needs a beat to start flowing and would otherwise swallow the short notes.
 Meeting participants hear the blip too, while the `/listen` tap stays clean.
 Set `conference.muteBusyCue: true` to silence it in calls entirely.
@@ -130,11 +130,21 @@ live widget disappears when recording stops, but the full transcript remains sea
 `/conference` (or `ctrl+shift+c`) lets pi join your Zoom/Meet call.
 
 While it's on, the extension also flips the **system default input/output** to
-`BlackHole 2ch` / `Pi Listens (Zoom speaker)` and restores your previous devices when you
-toggle off — so a call app set to "same as system" follows automatically (no per-app settings).
+`BlackHole 2ch` / a `Pi Listens` Multi-Output. When you toggle off, the output goes straight back
+to a **direct device** (`Shokz` if connected, else `MacBook Pro Speakers`) — not a Multi-Output —
+and the input goes back to the **built-in mic** (`MacBook Pro Microphone`), never the headset mic.
+So a call app set to "same as system" follows automatically (no per-app settings).
 
-- **pi speaks → you and the room.** pi's TTS is played into a Multi-Output device
-  (your headphones + BlackHole 2ch), so you hear it and the room hears it through Zoom's
+Routing follows two dimensions: **local/remote** (= `/conference`) and **headset on/off**
+(detected automatically from `audio.headsetDevice`, re-routed live if it changes mid-call):
+
+| | headset on | headset off |
+|---|---|---|
+| **local** | mic built-in → speaker Shokz | mic built-in → speaker MacBook Pro |
+| **remote** | in BlackHole 2ch → out `Pi Listens (headset)` | in BlackHole 2ch → out `Pi Listens (speaker)` |
+
+- **pi speaks → you and the room.** pi's TTS is played into the active Multi-Output (`voiceDevice`
+  = your playback device + BlackHole 2ch), so you hear it and the room hears it through Zoom's
   microphone.
 - **room hears you too.** your microphone is relayed into BlackHole (since you never talk at
   the same time as pi, no mixer is needed).
@@ -157,10 +167,21 @@ after editing `config.json`.
 brew install --cask blackhole-2ch blackhole-16ch   # audio driver → log out/in
 ```
 
-Then in **Audio MIDI Setup**: create `Pi Talks (Zoom mic)` = [your headphones/output + BlackHole 2ch],
-and `Pi Listens (Zoom speaker)` = [your headphones/output + BlackHole 16ch].
-In the call app: **Microphone = BlackHole 2ch**, **Speaker = Pi Listens (Zoom speaker)** — or leave both
-on "same as system" and let `/conference` switch the system defaults for you.
+Then in **Audio MIDI Setup** create **four** Multi-Output devices — one pair per headset column:
+
+| device | = |
+|---|---|
+| `Pi Talks (headset)` | Shokz + BlackHole 2ch |
+| `Pi Listens (headset)` | Shokz + BlackHole 16ch |
+| `Pi Talks (speaker)` | MacBook Pro Speakers + BlackHole 2ch |
+| `Pi Listens (speaker)` | MacBook Pro Speakers + BlackHole 16ch |
+
+In the call app: **Microphone = BlackHole 2ch**, **Speaker = same as system** (or whichever
+`Pi Listens` you want) — leaving it on "same as system" lets `/conference` switch it, headset
+column included, automatically.
+
+> The built-in column echoes: the meeting plays out of your MacBook speakers next to the mic being
+> relayed into the room. Prefer the headset; with built-in, lean on the call app's echo cancellation.
 
 ## Requirements
 
@@ -226,13 +247,17 @@ Edit `config.json`:
 | `audio.processingCue` | `true` | audible blip while waiting (transcribing/thinking) |
 | `audio.volume` | `0.4` | cue volume (0–1) |
 | `audio.headsetDevice` | `` | device watched for the connected/off indicator (empty = off) |
+| `audio.localSpeaker` | `` | built-in speakers for local playback when the headset is off |
 
 | `audio.intervalMs` | `650` | pause between cue notes |
 | `listen.model` | `deepgram/nova-3` | OpenRouter STT model |
 | `listen.chunkSeconds` | `5` | transcription chunk size |
 | `listen.skipSilence` / `silenceThreshold` | `true` / `0.005` | skip silent chunks |
 | `listen.outputDir` | `~/.pi/listen` | transcript storage directory |
-| `conference.outputDevice` | `Pi Talks (Zoom mic)` | where pi's TTS plays (headphones + BlackHole 2ch) |
+| `conference.headset.voiceDevice` | `Pi Talks (headset)` | pi → you(headset) + room |
+| `conference.headset.systemOutputDevice` | `Pi Listens (headset)` | call → you(headset) + tap |
+| `conference.builtin.voiceDevice` | `Pi Talks (speaker)` | pi → you(built-in) + room |
+| `conference.builtin.systemOutputDevice` | `Pi Listens (speaker)` | call → you(built-in) + tap |
 | `conference.roomDevice` | `BlackHole 2ch` | the virtual device Zoom uses as its microphone |
 | `conference.remoteTapDevice` | `BlackHole 16ch` | remote meeting audio tapped into `/listen` |
 | `conference.relayMic` / `remoteTap` | `true` | room relays toggles |
@@ -240,8 +265,7 @@ Edit `config.json`:
 | `conference.ttsGain` | `1.0` | gain on pi's voice in the room (lower it to balance) |
 | `conference.muteBusyCue` | `false` | silence the cue in calls (it normally plays into the room) |
 | `conference.systemInputDevice` | `BlackHole 2ch` | system default input while conference is on |
-| `conference.systemOutputDevice` | `Pi Listens (Zoom speaker)` | system default output while conference is on |
-| `conference.switchSystemDevices` | `true` | auto-switch these on enter, restore on exit |
+| `conference.switchSystemDevices` | `true` | auto-switch system devices on enter; on exit output → direct headset/speaker, input → built-in mic |
 | `listen.contextWindowChars` | `6000` | recent transcript injected into the prompt |
 | `listen.widgetLines` | `8` | transcript lines shown above the editor |
 | `listen.summaryModel` | `deepseek/deepseek-chat` | model that writes the save-time summary + title |

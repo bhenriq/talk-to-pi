@@ -135,18 +135,21 @@ space again to talk.
 | `input.conferenceShortcut` | `ctrl+shift+c` |
 | `input.voiceShortcut` | `ctrl+shift+o` |
 | `input.micDevice` | `MacBook Pro Microphone` |
-| `conference.outputDevice` | `Pi Talks (Zoom mic)` |
 | `conference.roomDevice` | `BlackHole 2ch` |
 | `conference.remoteTapDevice` | `BlackHole 16ch` |
 | `conference.relayMic` / `remoteTap` | `true` |
 | `conference.muteBusyCue` | `false` |
 | `conference.systemInputDevice` | `BlackHole 2ch` |
-| `conference.systemOutputDevice` | `Pi Listens (Zoom speaker)` |
 | `conference.switchSystemDevices` | `true` |
+| `conference.headset.voiceDevice` | `Pi Talks (headset)` — pi → you(headset) + room |
+| `conference.headset.systemOutputDevice` | `Pi Listens (headset)` — call → you(headset) + tap |
+| `conference.builtin.voiceDevice` | `Pi Talks (speaker)` — pi → you(built-in) + room |
+| `conference.builtin.systemOutputDevice` | `Pi Listens (speaker)` — call → you(built-in) + tap |
 | `promptNudge` | `true` |
 | `audio.processingCue` | `true` |
 | `audio.volume` | `0.4` |
 | `audio.headsetDevice` | `` (this repo: `OpenSwim Pro by Shokz`) |
+| `audio.localSpeaker` | `` (this repo: `MacBook Pro Speakers`) — local playback when the headset is off |
 
 | `audio.intervalMs` | `650` |
 | `listen.model` | `deepgram/nova-3` |
@@ -169,7 +172,8 @@ space again to talk.
 
 - Never start timers/processes in the extension factory: start on `session_start`, clean up in
   `session_shutdown` (idempotently). Kill `sox`, `say`/`afplay`, the key-watcher/audio-default helpers,
-  the relay, and all timers on shutdown and on `/talk` off; restore the previous system default audio devices.
+  the relay, and all timers on shutdown and on `/talk` off; on shutdown put the system input back to the
+  built-in mic and the system output on a direct device (headset or built-in speakers), never a Multi-Output.
 - Keyboard capture via `ctx.ui.onTerminalInput()`, which intercepts raw keys **before** the editor.
   Consume space/Esc while talk mode is on; return `undefined` for everything else so normal editing —
   including pi-vim — is untouched. **No editor replacement, so pi-vim coexists without loss.**
@@ -211,27 +215,55 @@ A separate, listen-only mode. `/listen` or the `ctrl+shift+l` shortcut toggles i
 
 Routes pi into a call app, using `sox -t coreaudio` device targeting (no native code).
 
-- **TTS destination**: while on, pi's spoken replies are played into `conference.outputDevice`
-  (a Multi-Output of your headphones + `roomDevice`) so both you and the room hear them.
+### Audio routing model (two dimensions)
+
+Audio control is a 2×2: **local / remote** (row) × **headset on / off** (column). The row is the
+`/conference` toggle; the column is detected automatically from `audio.headsetDevice`
+(`state.headsetConnected`), re-routed live if the headset connects/disconnects mid-call.
+
+| | headset on | headset off |
+|---|---|---|
+| **local** | mic `input.micDevice`, speaker `audio.headsetDevice` | mic `input.micDevice`, speaker `audio.localSpeaker` |
+| **remote** | system in `BlackHole 2ch`, out `conference.headset.*` | system in `BlackHole 2ch`, out `conference.builtin.*` |
+
+Decisions locked in:
+- **Physical mic is always `input.micDevice`** (MacBook Pro mic). The Shokz's 16 kHz input is never
+  used. `BlackHole 2ch` is only the *system input* (what the call app hears), fed by the mic relay.
+- **"Headset" is baked into Multi-Output devices**, so on/off selects between two pre-built pairs:
+  `conference.headset.*` vs `conference.builtin.*` (both pairs configured once in Audio MIDI Setup).
+- **Local TTS plays to the macOS system default output** (`afplay`). Never `sox` to the headset by
+  name: macOS exposes the Shokz as one input and one output device with the same name, and sox's
+  CoreAudio driver cannot disambiguate. The system default already follows the headset
+  (headset when connected, built-in speakers when it is not), and exit-time switching sets it via
+  the direction-aware native helper rather than sox.
+- **Echo risk accepted** for the built-in column: call audio out of the MacBook speakers next to an
+  open mic. Headset is preferred; rely on the call app's echo cancellation otherwise.
+
+- **TTS destination**: while on, pi's spoken replies are played into the active column's
+  `voiceDevice` (a Multi-Output of your playback device + `roomDevice`) so both you and the room
+  hear them.
 - **Mic relay**: `sox micDevice → roomDevice` continuously, so the room hears you too. Relies on
   the assumption that you do not speak at the same time as pi (no mixer required).
 - **Remote tap**: `/listen` adds a second capture source (`remoteTapDevice`) while conference mode
   is on, so the transcript includes remote participants as well as your mic. Timestamps are wall-clock,
   interleaving both sources.
-- During conference the busy cue plays as a continuous loop through `conference.outputDevice`
-  (sox, the voice path) so participants hear it; a single long-lived sox stream means the short
-  notes are not swallowed by the Multi-Output's startup latency, and the `/listen` remote tap is
-  not on that path. `muteBusyCue` (default false) silences it entirely in calls.
+- During conference the busy cue plays as a continuous loop through the active column's
+  `voiceDevice` (sox, the voice path) so participants hear it; a single long-lived sox stream means
+  the short notes are not swallowed by the Multi-Output's startup latency, and the `/listen` remote
+  tap is not on that path. `muteBusyCue` (default false) silences it entirely in calls.
 - Status bar shows `🔊 conf: on`. Toggled by `/conference` or `ctrl+shift+c`.
 - **Headset watch**: while talk or conference is on, `audio.headsetDevice` is probed every 3 s via
   `audio-default probe` (present + alive + output streams). The footer shows `🎧 headset: on|off`
   and a transition notifies the user. A switched-off Bluetooth headset is absent from CoreAudio's
   device list, which is what makes this reliable; no probing happens while both modes are off.
 - **System device switch**: on enter, the system default input/output are captured and set to
-  `systemInputDevice` / `systemOutputDevice` (so a call app aligned on "same as system" follows);
-  on exit, reload, or shutdown the previous devices are restored (native `audio-default` helper).
+  `systemInputDevice` / the active column's `systemOutputDevice` (so a call app aligned on "same as
+  system" follows); a headset connect/disconnect mid-call re-routes the output live. On exit,
+  reload, or shutdown the **output goes to a direct device** (`audio.headsetDevice` if connected,
+  else `audio.localSpeaker`) — never a leftover Multi-Output; the input goes back to the built-in
+  mic `input.micDevice`, never the headset mic (native `audio-default` helper).
 
-Requires BlackHole 2ch + 16ch and an Audio MIDI Setup of two Multi-Output devices (documented in README).
+Requires BlackHole 2ch + 16ch and an Audio MIDI Setup of **four** Multi-Output devices (documented in README).
 
 ## 10. Out of scope (for now)
 

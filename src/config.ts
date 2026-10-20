@@ -5,6 +5,13 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = join(__dirname, "..", "config.json");
 
+export interface ConferenceOutputs {
+  /** Where pi's TTS plays so both you and the room hear it (a Multi-Output). */
+  voiceDevice: string;
+  /** System default output while conference is on (call audio → you + remote tap). */
+  systemOutputDevice: string;
+}
+
 export interface TalkConfig {
   stt: {
     model: string;
@@ -61,6 +68,8 @@ export interface TalkConfig {
      * on. Empty disables the watch (no probing, no footer item).
      */
     headsetDevice: string;
+    /** Built-in speakers used for local playback when the headset is off (empty = system default). */
+    localSpeaker: string;
   };
   listen: {
     model: string;
@@ -97,8 +106,6 @@ export interface TalkConfig {
     mode: "auto" | "approval";
   };
   conference: {
-    /** Where pi's TTS is played so both you and the room hear it (Multi-Output). */
-    outputDevice: string;
     /** Virtual device whose input Zoom uses as its microphone (BlackHole 2ch). */
     roomDevice: string;
     /** Virtual device that taps the meeting audio into /listen (BlackHole 16ch). */
@@ -113,12 +120,14 @@ export interface TalkConfig {
     remoteTap: boolean;
     /** Silence the busy cue entirely while conference mode is on (false by default: it plays into the room like pi's voice). */
     muteBusyCue: boolean;
-    /** While on, switch the system default input to this device. */
+    /** While on, switch the system default input to this device (BlackHole 2ch, both columns). */
     systemInputDevice: string;
-    /** While on, switch the system default output to this device. */
-    systemOutputDevice: string;
     /** Auto-switch the system default input/output on enter, restore on exit. */
     switchSystemDevices: boolean;
+    /** Output devices for the headset-connected column. */
+    headset: ConferenceOutputs;
+    /** Output devices for the headset-off (built-in speakers) column. */
+    builtin: ConferenceOutputs;
   };
 }
 
@@ -135,7 +144,7 @@ const DEFAULTS: TalkConfig = {
   },
   input: { key: "space", listenShortcut: "ctrl+shift+l", talkShortcut: "ctrl+shift+t", conferenceShortcut: "ctrl+shift+c", voiceShortcut: "ctrl+shift+o", micDevice: "MacBook Pro Microphone", keyCode: 49, pollMs: 25, repeatSilenceMs: 150, debounceMs: 250, minRecordingMs: 400 },
   promptNudge: true,
-  audio: { processingCue: true, volume: 0.4, intervalMs: 650, headsetDevice: "" },
+  audio: { processingCue: true, volume: 0.4, intervalMs: 650, headsetDevice: "", localSpeaker: "" },
   listen: {
     model: "deepgram/nova-3",
     sampleRate: 16000,
@@ -152,7 +161,6 @@ const DEFAULTS: TalkConfig = {
   },
   say: { mode: "auto" },
   conference: {
-    outputDevice: "Pi Talks (Zoom mic)",
     roomDevice: "BlackHole 2ch",
     remoteTapDevice: "BlackHole 16ch",
     relayMic: true,
@@ -161,8 +169,15 @@ const DEFAULTS: TalkConfig = {
     remoteTap: true,
     muteBusyCue: false,
     systemInputDevice: "BlackHole 2ch",
-    systemOutputDevice: "Pi Listens (Zoom speaker)",
     switchSystemDevices: true,
+    headset: {
+      voiceDevice: "Pi Talks (headset)",
+      systemOutputDevice: "Pi Listens (headset)",
+    },
+    builtin: {
+      voiceDevice: "Pi Talks (speaker)",
+      systemOutputDevice: "Pi Listens (speaker)",
+    },
   },
 };
 
@@ -178,6 +193,21 @@ function merge(base: Record<string, unknown>, over: Record<string, unknown>): Re
     }
   }
   return out;
+}
+
+export function conferenceColumn(cfg: TalkConfig, headsetOn: boolean): ConferenceOutputs {
+  return headsetOn ? cfg.conference.headset : cfg.conference.builtin;
+}
+
+/**
+ * Local playback target: the headset when it is connected, the built-in speakers
+ * when it is known to be off, and "" (system default) when the state is unknown.
+ * Empty string means "play to the macOS system default" (afplay).
+ */
+export function localPlaybackDevice(cfg: TalkConfig, headset: boolean | null): string {
+  if (headset === true) return cfg.audio.headsetDevice;
+  if (headset === false) return cfg.audio.localSpeaker;
+  return "";
 }
 
 export function loadConfig(): TalkConfig {

@@ -20,6 +20,7 @@ export class HeadsetWatch {
   constructor(
     private pi: ExtensionAPI,
     private cfg: TalkConfig,
+    private onChange?: (connected: boolean) => void,
   ) {}
 
   start() {
@@ -58,6 +59,7 @@ export class HeadsetWatch {
       if (connected !== state.headsetConnected) {
         state.headsetConnected = connected;
         refreshStatus();
+        this.onChange?.(connected);
       }
       if (this.lastNotified !== null && this.lastNotified !== connected) {
         const name = this.cfg.audio.headsetDevice;

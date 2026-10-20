@@ -9,12 +9,12 @@ import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-
 import { matchesKey } from "@earendil-works/pi-tui";
 import { BusyAudio } from "./src/busy-audio.ts";
 import { HeadsetWatch } from "./src/headset.ts";
-import { loadConfig, saveSayMode } from "./src/config.ts";
+import { conferenceColumn, loadConfig, localPlaybackDevice, saveSayMode } from "./src/config.ts";
 import { Listener } from "./src/listen.ts";
 import { Recorder } from "./src/recorder.ts";
 import { Relay } from "./src/relay.ts";
 import { summarizeMeeting } from "./src/summary.ts";
-import { getDefaultDevice, setDefaultDevice } from "./src/system-audio.ts";
+import { getDefaultDevice, probeDevice, setDefaultDevice } from "./src/system-audio.ts";
 import { VoiceMenu } from "./src/voice-menu.ts";
 import { Speaker } from "./src/speaker.ts";
 import { SpeechStream } from "./src/speech-stream.ts";
@@ -45,7 +45,7 @@ export default function (pi: ExtensionAPI) {
   const speaker = new Speaker(pi, cfg);
   const busyAudio = new BusyAudio(pi, cfg);
   setBusyAudio((active) => busyAudio.setActive(active));
-  const headset = new HeadsetWatch(pi, cfg);
+  const headset = new HeadsetWatch(pi, cfg, (connected) => onHeadsetChanged(connected));
   const speech = new SpeechStream();
   const sayStream = new SpeechStream(); // collects text for approval-mode /say
   const listener = new Listener(cfg);
@@ -56,7 +56,6 @@ export default function (pi: ExtensionAPI) {
   let recorder: Recorder | null = null;
   let terminalUnsub: (() => void) | null = null;
   let lastReleaseAt = 0;
-  let prevInputDevice: string | null = null;
   let prevOutputDevice: string | null = null;
   let menuOpen = false;
   /** Active /say mode for the current turn (false outside /say turns). */
@@ -348,19 +347,68 @@ export default function (pi: ExtensionAPI) {
     }
   }
 
+  function headsetOn(): boolean {
+    return state.headsetConnected === true;
+  }
+
+  /** Probe the headset once at conference start so the right column is chosen. */
+  async function ensureHeadsetKnown() {
+    if (state.headsetConnected !== null) return;
+    if (!cfg.audio.headsetDevice) {
+      state.headsetConnected = false;
+      return;
+    }
+    try {
+      const probe = await probeDevice(pi, cfg.audio.headsetDevice);
+      state.headsetConnected = probe ? probe.present && probe.alive && probe.outStreams > 0 : false;
+      refreshStatus();
+    } catch {
+      state.headsetConnected = false;
+    }
+  }
+
+  /** Point the system defaults at the conference devices for the current column. */
+  async function applyConferenceDevices() {
+    const col = conferenceColumn(cfg, headsetOn());
+    await setDefaultDevice(pi, "input", cfg.conference.systemInputDevice);
+    await setDefaultDevice(pi, "output", col.systemOutputDevice);
+  }
+
+  /** Re-route when the headset connects/disconnects mid-call. */
+  function onHeadsetChanged(connected: boolean) {
+    if (!state.conference) return;
+    void (async () => {
+      try {
+        await applyConferenceDevices();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        state.ctx?.ui.notify(`Audio re-route failed: ${msg}`, "warning");
+        return;
+      }
+      const col = conferenceColumn(cfg, connected);
+      state.ctx?.ui.notify(
+        connected
+          ? `Headset connected — audio routed to ${col.voiceDevice}`
+          : `Headset disconnected — audio routed to ${col.voiceDevice}`,
+        connected ? "info" : "warning",
+      );
+    })();
+  }
+
   async function restoreSystemDevices(ctx?: ExtensionContext) {
     try {
-      if (prevOutputDevice) {
-        await setDefaultDevice(pi, "output", prevOutputDevice);
-        prevOutputDevice = null;
-      }
-      if (prevInputDevice) {
-        await setDefaultDevice(pi, "input", prevInputDevice);
-        prevInputDevice = null;
-      }
+      // Leave the Multi-Output world: land on a direct device (headset if connected,
+      // built-in speakers otherwise) rather than the pre-conference default, which
+      // can itself be a leftover Multi-Output.
+      const output = localPlaybackDevice(cfg, state.headsetConnected) || prevOutputDevice;
+      if (output) await setDefaultDevice(pi, "output", output);
+      // Input always goes back to the built-in mic — never the headset mic.
+      if (cfg.input.micDevice) await setDefaultDevice(pi, "input", cfg.input.micDevice);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       ctx?.ui.notify(`Failed to restore system audio: ${msg}`, "warning");
+    } finally {
+      prevOutputDevice = null;
     }
   }
 
@@ -372,16 +420,15 @@ export default function (pi: ExtensionAPI) {
     attach(ctx);
     state.conference = !state.conference;
     if (state.conference) {
+      await ensureHeadsetKnown();
       if (cfg.conference.relayMic) relay.start();
       listener.setRemoteTap(cfg.conference.remoteTap);
       refreshStatus();
-      ctx.ui.notify("Conference mode on — pi's voice goes to you + the room", "info");
+      ctx.ui.notify(`Conference mode on — pi's voice to ${conferenceColumn(cfg, headsetOn()).voiceDevice}`, "info");
       if (cfg.conference.switchSystemDevices) {
         try {
-          prevInputDevice = await getDefaultDevice(pi, "input");
           prevOutputDevice = await getDefaultDevice(pi, "output");
-          await setDefaultDevice(pi, "input", cfg.conference.systemInputDevice);
-          await setDefaultDevice(pi, "output", cfg.conference.systemOutputDevice);
+          await applyConferenceDevices();
           ctx.ui.notify("System audio switched for the call", "info");
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -393,7 +440,8 @@ export default function (pi: ExtensionAPI) {
       relay.stop();
       listener.setRemoteTap(false);
       refreshStatus();
-      ctx.ui.notify("Conference mode off", "info");
+      const out = localPlaybackDevice(cfg, state.headsetConnected);
+      ctx.ui.notify(out ? `Conference mode off — audio back to ${out}` : "Conference mode off", "info");
     }
   }
 

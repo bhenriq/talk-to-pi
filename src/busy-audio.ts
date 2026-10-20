@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import type { TalkConfig } from "./config.ts";
+import { conferenceColumn, type TalkConfig } from "./config.ts";
 import { state } from "./state.ts";
 
 /**
@@ -104,11 +104,14 @@ export class BusyAudio {
    */
   private play(cue: string, controller: AbortController): Promise<unknown> {
     const vol = String(this.cfg.audio.volume);
+    const headset = state.headsetConnected;
     if (state.conference) {
-      return this.pi.exec("sox", ["-v", vol, cue, "-t", "coreaudio", this.cfg.conference.outputDevice], {
+      const col = conferenceColumn(this.cfg, headset === true);
+      return this.pi.exec("sox", ["-v", vol, cue, "-t", "coreaudio", col.voiceDevice], {
         signal: controller.signal,
       });
     }
+    // Local: system default output; see Speaker.playFile for why we never sox to the headset name.
     return this.pi.exec("afplay", ["-v", vol, cue], { signal: controller.signal });
   }
 

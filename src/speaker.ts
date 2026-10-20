@@ -2,7 +2,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import type { TalkConfig } from "./config.ts";
+import { conferenceColumn, type TalkConfig } from "./config.ts";
 import { readOpenRouterToken } from "./openrouter.ts";
 import { refreshStatus, state } from "./state.ts";
 
@@ -186,12 +186,8 @@ export class Speaker {
   private async speakSay(text: string, controller: AbortController): Promise<void> {
     const voice = await this.resolveSayVoice();
     const rate = String(Math.round(180 * this.getSpeed()));
-    if (!state.conference) {
-      const args = [...(voice ? ["-v", voice] : []), "-r", rate, text];
-      await this.pi.exec(this.cfg.tts.command, args, { signal: controller.signal });
-      return;
-    }
-    // Conference: render to AIFF, then play it into the conference output device.
+    // Always render to a file first so playFile can target any CoreAudio device
+    // (headset / built-in / conference), not just the macOS default output.
     mkdirSync(this.ttsDir, { recursive: true });
     const file = join(this.ttsDir, `s-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.aiff`);
     const args = [...(voice ? ["-v", voice] : []), "-r", rate, "-o", file, text];
@@ -207,18 +203,23 @@ export class Speaker {
     }
   }
 
-  /** Play an audio file to the right destination for the current mode. */
+  /** Play an audio file to the right destination for the current mode + headset column. */
   private playFile(file: string, controller: AbortController): Promise<unknown> {
+    const headset = state.headsetConnected;
     if (state.conference) {
-      // sox targets a named CoreAudio output device (the Multi-Output). `ttsGain`
-      // keeps pi's voice from drowning out the relayed mic in the room.
+      // sox targets the named Multi-Output for this column. `ttsGain` keeps pi's
+      // voice from drowning out the relayed mic in the room.
+      const col = conferenceColumn(this.cfg, headset === true);
       const gain = this.cfg.conference.ttsGain;
-      const args = [file, "-t", "coreaudio", this.cfg.conference.outputDevice];
+      const args = [file, "-t", "coreaudio", col.voiceDevice];
       if (Number.isFinite(gain) && Math.abs(gain - 1) > 0.001 && gain > 0) {
         args.push("vol", String(gain));
       }
       return this.pi.exec("sox", args, { signal: controller.signal });
     }
+    // Local: play to the system default output (the headset when connected, the built-in
+    // speakers when it is not). Never target the headset by name with sox — macOS exposes
+    // one input and one output device under the same name, and sox cannot disambiguate.
     return this.pi.exec("afplay", [file], { signal: controller.signal });
   }
 }
