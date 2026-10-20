@@ -34,6 +34,13 @@ export interface TalkConfig {
   };
   input: {
     key: string;
+    /** macOS virtual keycode for `key` (61 = right option). */
+    keyCode: number;
+    /**
+     * Bundle ids of the apps where the native talk key counts as "focused" (your
+     * terminal(s)). Holding the talk key while another app is frontmost is ignored.
+     */
+    talkTerminalApps: string[];
     /** Keyboard shortcut to toggle /listen (start/stop mic transcription). */
     listenShortcut: string;
     /** Keyboard shortcut to toggle /talk mode. */
@@ -44,12 +51,10 @@ export interface TalkConfig {
     voiceShortcut: string;
     /** The microphone always used for talk and /listen (never the headset mic). */
     micDevice: string;
-    /** macOS virtual keycode: 49 = space. */
-    keyCode: number;
     pollMs: number;
-    /** Autorepeat fallback: silence after the last repeat counts as release. */
+    /** Unused (kept for backward compatibility). */
     repeatSilenceMs: number;
-    /** Ignore a space press this soon after a release. */
+    /** Ignore a talk-key press this soon after a release. */
     debounceMs: number;
     /** Recordings shorter than this are discarded. */
     minRecordingMs: number;
@@ -142,7 +147,29 @@ const DEFAULTS: TalkConfig = {
     model: "elevenlabs/eleven-flash-v2.5",
     format: "mp3",
   },
-  input: { key: "space", listenShortcut: "ctrl+shift+l", talkShortcut: "ctrl+shift+t", conferenceShortcut: "ctrl+shift+c", voiceShortcut: "ctrl+shift+o", micDevice: "MacBook Pro Microphone", keyCode: 49, pollMs: 25, repeatSilenceMs: 150, debounceMs: 250, minRecordingMs: 400 },
+  input: {
+    key: "f5",
+    keyCode: 96,
+    talkTerminalApps: [
+      "com.apple.Terminal",
+      "com.googlecode.iterm2",
+      "net.kovidgoyal.kitty",
+      "org.alacritty",
+      "dev.warp.Warp-Stable",
+      "co.zeit.hyper",
+      "com.microsoft.VSCode",
+      "com.github.wez.wezterm",
+    ],
+    listenShortcut: "ctrl+shift+l",
+    talkShortcut: "ctrl+shift+t",
+    conferenceShortcut: "ctrl+shift+c",
+    voiceShortcut: "ctrl+shift+o",
+    micDevice: "MacBook Pro Microphone",
+    pollMs: 25,
+    repeatSilenceMs: 150,
+    debounceMs: 250,
+    minRecordingMs: 400,
+  },
   promptNudge: true,
   audio: { processingCue: true, volume: 0.4, intervalMs: 650, headsetDevice: "", localSpeaker: "" },
   listen: {

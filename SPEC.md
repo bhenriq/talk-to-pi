@@ -1,6 +1,6 @@
 # talk-to-pi — voice mode for pi
 
-A pi extension that adds a `/talk` mode: **hold space to speak** (or **type `/say`**), pi answers **out loud**.
+A pi extension that adds a `/talk` mode: **hold F5 to speak** (or **type `/say`**), pi answers **out loud**.
 
 Status: implemented. `/talk`, `/say`, `/listen` (pi-labeled lines + summary save-on-stop), and `/conference`
 (BlackHole routing + system-device switch) are wired and smoke-tested; push-to-talk, STT/TTS, the
@@ -21,15 +21,17 @@ against the installed BlackHole devices but still warrants a real-call shakedown
 
 While the mode is on, a footer status shows the state:
 `🎙 talk: idle` / `🎙 listening` / `🎙 transcribing …` / `🧠 thinking …` / `🔊 speaking`.
-During the wait (transcribing or thinking — i.e. from releasing space until pi starts speaking),
+During the wait (transcribing or thinking — i.e. from releasing the talk key until pi starts speaking),
 the trailing waveform animates every ~120 ms and stops as soon as speech starts or the mode turns off.
 
 An **audible** cue plays over the same window: two very soft alternating notes (`sox synth` →
 `afplay`, ~0.6 s apart), so work is hearable from release until pi begins answering. It is
 generated once, cached in the temp dir, and killed on speech/Esc/mode-off. See `audio.*` config.
 
-While talk mode is on, **space is reserved for recording** and never inserted into the editor; all
-other keys behave normally (including typing, except space).
+While talk mode is on, **every key stays editable — including Space**. The talk key (F5) is
+read natively from the keyboard, never from the terminal, so it never steals a key. The native
+poll only counts the key while a configured terminal app (`input.talkTerminalApps`) is frontmost.
+F5 must be in function-key mode (see the warning on enable).
 
 **`/say` is the typing path.** It never records the mic: it submits the typed text as a normal user
 message and arms exactly one turn of spoken replies. It requires neither talk mode nor any key
@@ -42,22 +44,17 @@ handling, and clears automatically when the turn ends. `say.mode` picks the beha
 
 ## 2. Speaking to pi (STT)
 
-**Hold space** → recording starts. **Release space** → recording stops, audio is transcribed,
+**Hold the talk key** → recording starts. **Release it** → recording stops, audio is transcribed,
 transcript is **auto-submitted** as a normal user message.
 
-- Release detection, in order of preference:
-  1. **Native key-state poll** — `CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, 49)`
-     sampled every ~25 ms via a tiny compiled helper (`clang`, cached binary). The keypress itself
-     still arrives through the terminal, so focus and key identity come from pi, not the poll.
-  2. **Autorepeat fallback** — if the poll reports space as always up (no AX trust), infer release
-     from autorepeats ceasing for ~150 ms; recordings shorter than 400 ms are discarded.
-- Reason: iTerm2 + tmux do not deliver Kitty key-release events, so the terminal cannot report release.
-  The OS keyboard state bypasses tmux entirely.
-- A space press within 250 ms of a release is ignored (debounce), so the tail of a hold never restarts recording.
-- **Space while pi is speaking** barge-ins: it interrupts (stops speech + aborts the run) **and** starts
+- **Native key-state poll** — `CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState,
+  keyCode)` sampled every ~25 ms via a tiny compiled helper (`clang`, cached binary). It detects
+  **both press and release** and gates press on the frontmost app being in `input.talkTerminalApps`.
+- A talk-key press within 250 ms of a release is ignored (debounce), so the tail of a hold never restarts recording.
+- **Talk key while pi is speaking** barge-ins: it interrupts (stops speech + aborts the run) **and** starts
   a new recording immediately, so you can retake the turn.
 - **Esc while recording** cancels: recording discarded, nothing submitted.
-- **While pi is busy** (run in progress), holding space does nothing at all. Interrupting work is done
+- **While pi is busy** (run in progress), holding the talk key does nothing at all. Interrupting work is done
   with Esc (see §4).
 - Recordings shorter than ~0.4 s, or that transcribe to empty, are discarded with a status flash.
 
@@ -101,12 +98,12 @@ POST https://openrouter.ai/api/v1/chat/completions
 ## 4. Interrupting pi
 
 **Esc while pi is speaking or working → audio stops immediately and the run is aborted.** Back to idle; hold
-space again to talk.
+the talk key again to talk.
 
 - **Esc while idle** does nothing — Esc never exits a mode; only `/talk`, `/listen`, or the
   `ctrl+shift+t` / `ctrl+shift+l` shortcuts toggle modes.
 - **Esc while transcribing** is ignored (the transcript still auto-submits).
-- **Space while pi is speaking** barge-ins: same interrupt as Esc, plus a new recording starts immediately.
+- **Talk key while pi is speaking** barge-ins: same interrupt as Esc, plus a new recording starts immediately.
 - Killing the audio means killing the active playback process (`afplay` for cloud TTS, `say` for the
   offline provider) and dropping the sentence queue; nothing already killed can leak through.
 
@@ -124,10 +121,11 @@ space again to talk.
 | `tts.model` | `elevenlabs/eleven-flash-v2.5` |
 | `tts.format` | `mp3` |
 | `stt.channels` / `stt.bits` | `1` / `16` |
-| `input.key` | `space` |
-| `input.keyCode` | `49` (macOS virtual keycode for space) |
+| `input.key` | `f5` |
+| `input.keyCode` | `96` (macOS virtual keycode for F5) |
+| `input.talkTerminalApps` | terminal bundle ids (see config.json) |
 | `input.pollMs` | `25` |
-| `input.repeatSilenceMs` | `150` |
+| `input.repeatSilenceMs` | `150` (unused — kept for backward compatibility) |
 | `input.debounceMs` | `250` |
 | `input.minRecordingMs` | `400` |
 | `input.listenShortcut` | `ctrl+shift+l` |
@@ -175,8 +173,9 @@ space again to talk.
   the relay, and all timers on shutdown and on `/talk` off; on shutdown put the system input back to the
   built-in mic and the system output on a direct device (headset or built-in speakers), never a Multi-Output.
 - Keyboard capture via `ctx.ui.onTerminalInput()`, which intercepts raw keys **before** the editor.
-  Consume space/Esc while talk mode is on; return `undefined` for everything else so normal editing —
-  including pi-vim — is untouched. **No editor replacement, so pi-vim coexists without loss.**
+  Consume only Esc while talk mode is on (the talk key itself is polled natively); return `undefined`
+  for everything else so normal editing — including pi-vim and Space — is untouched. **No editor
+  replacement, so pi-vim coexists without loss.**
 - **Unsent editor text** is left untouched: a voiced transcript always auto-submits as its own message.
 - Track busy state from `agent_start` / `agent_end` / `agent_settled`.
 - Terminal-only behavior guarded by `ctx.mode === "tui"`; the extension must not break non-interactive modes.

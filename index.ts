@@ -1,4 +1,4 @@
-// talk-to-pi — hold space to talk, pi answers out loud.
+// talk-to-pi — hold the talk key to speak, pi answers out loud.
 // See SPEC.md for the full behaviour contract.
 
 import { existsSync, rmSync, writeFileSync } from "node:fs";
@@ -9,6 +9,7 @@ import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-
 import { matchesKey } from "@earendil-works/pi-tui";
 import { BusyAudio } from "./src/busy-audio.ts";
 import { HeadsetWatch } from "./src/headset.ts";
+import { getKeyWatcherBinary, watchKey, type KeyWatcher } from "./src/keywatch.ts";
 import { conferenceColumn, loadConfig, localPlaybackDevice, saveSayMode } from "./src/config.ts";
 import { Listener } from "./src/listen.ts";
 import { Recorder } from "./src/recorder.ts";
@@ -40,6 +41,20 @@ function assistantText(message: unknown): string {
   return "";
 }
 
+/** Human-friendly talk-key label for notifications. */
+function displayKey(key: string): string {
+  const pretty: Record<string, string> = {
+    space: "Space",
+    escape: "Esc",
+    "right-option": "Right ⌥",
+    "right-alt": "Right ⌥",
+    "right-command": "Right ⌘",
+    "right-cmd": "Right ⌘",
+  };
+  if (pretty[key]) return pretty[key];
+  return /^f\d+$/i.test(key) ? key.toUpperCase() : key;
+}
+
 export default function (pi: ExtensionAPI) {
   const cfg = loadConfig();
   const speaker = new Speaker(pi, cfg);
@@ -64,6 +79,22 @@ export default function (pi: ExtensionAPI) {
   let pendingSay: false | "auto" | "approval" = false;
   /** Collected speech text for an approval-mode /say turn. */
   let sayQueue: string[] = [];
+  let talkKeyWatcher: KeyWatcher | null = null;
+
+  /** Warn when the talk key is an F-key but macOS is still in media-key mode. */
+  async function warnFnKeys(ctx: ExtensionContext) {
+    try {
+      const res = await pi.exec("defaults", ["read", "-g", "com.apple.keyboard.fnState"]);
+      if (String(res.stdout).trim() !== "1") {
+        ctx.ui.notify(
+          "F-keys are set to media actions — turn on 'Use F1, F2, etc. keys as standard function keys' (System Settings → Keyboard → Keyboard Shortcuts… → Function Keys), or the talk key won't be detected",
+          "warning",
+        );
+      }
+    } catch {
+      // Setting is unset in some environments; the watcher simply won't see F-key presses.
+    }
+  }
 
   function setEnabled(on: boolean, ctx: ExtensionContext) {
     state.ctx = ctx;
@@ -74,8 +105,11 @@ export default function (pi: ExtensionAPI) {
     state.enabled = on;
     if (on) {
       refreshStatus();
-      ctx.ui.notify("Talk mode on — hold space to talk, Esc to interrupt", "info");
+      startTalkKeyWatcher();
+      if (/^f\d+$/i.test(cfg.input.key)) void warnFnKeys(ctx);
+      ctx.ui.notify(`Talk mode on — hold ${displayKey(cfg.input.key)} to talk, Esc to interrupt`, "info");
     } else {
+      stopTalkKeyWatcher();
       recorder?.cancel();
       recorder = null;
       speaker.stop();
@@ -120,6 +154,57 @@ export default function (pi: ExtensionAPI) {
       state.ctx?.ui.notify(`Transcription failed: ${msg}`, "error");
     }
     refreshStatus();
+  }
+
+  // ── Talk-key watcher (native poll, with a frontmost-app guard) ───────────
+  // The talk key is read directly from macOS key state, so a bare modifier like
+  // Right ⌥ works and Space stays free for typing. Down starts a recording, up
+  // releases it; the helper only reports down while a configured terminal app is
+  // frontmost so holding the key in another app does nothing.
+
+  function startTalkKeyWatcher() {
+    if (talkKeyWatcher) return;
+    const bin = getKeyWatcherBinary();
+    if (!bin) {
+      state.ctx?.ui.notify("Talk-key watcher unavailable — push-to-talk won't work", "error");
+      return;
+    }
+    talkKeyWatcher = watchKey(
+      bin,
+      cfg.input.keyCode,
+      cfg.input.pollMs,
+      cfg.input.talkTerminalApps,
+      (down) => {
+        if (down) handleTalkKeyDown();
+        else handleTalkKeyUp();
+      },
+    );
+  }
+
+  function stopTalkKeyWatcher() {
+    talkKeyWatcher?.stop();
+    talkKeyWatcher = null;
+  }
+
+  function handleTalkKeyDown() {
+    if (!state.enabled || menuOpen) return;
+    if (state.recording || state.transcribing) return;
+    if (state.busy || state.speaking) {
+      // Barge-in: interrupt pi and start listening immediately.
+      speaker.stop();
+      if (state.busy) state.ctx?.abort();
+      startRecording();
+      return;
+    }
+    if (Date.now() - lastReleaseAt < cfg.input.debounceMs) return; // tail of a recent release
+    startRecording();
+  }
+
+  function handleTalkKeyUp() {
+    if (state.recording && recorder) {
+      recorder.release();
+      lastReleaseAt = Date.now();
+    }
   }
 
   async function approveSay(ctx: ExtensionContext, sentences: string[]) {
@@ -193,44 +278,23 @@ export default function (pi: ExtensionAPI) {
       }
       return undefined;
     }
-    const isSpace = matchesKey(data, cfg.input.key);
-    if (!isSpace && !isEsc) return undefined;
+    // Talk mode is on. The talk key is polled natively for recording, but the
+    // terminal still DELIVERS it (F-keys are real keys), so consume it here so it
+    // never reaches the editor/pi-vim. Space and everything else stays editable.
+    if (matchesKey(data, cfg.input.key)) return { consume: true };
+    if (!isEsc) return undefined;
 
-    if (isEsc) {
-      if (state.recording && recorder) {
-        recorder.cancel();
-        recorder = null;
-      } else if (state.transcribing) {
-        // Ignore: transcription is already in flight.
-      } else if (state.busy || state.speaking) {
-        // Cut the AI short / interrupt speech (works even while the queued TTS is still reading).
-        speaker.stop();
-        if (state.busy) state.ctx?.abort();
-      }
-      // Idle: nothing — Esc never exits a mode; only /talk, /listen and the shortcuts toggle modes.
-      return { consume: true };
-    }
-
-    // Space (talk key)
-    if (state.transcribing) {
-      return { consume: true }; // still submitting the last utterance
-    }
     if (state.recording && recorder) {
-      recorder.onSpaceEvent();
-      return { consume: true };
-    }
-    if (state.busy || state.speaking) {
-      // Barge-in: interrupt the AI and start listening again.
+      recorder.cancel();
+      recorder = null;
+    } else if (state.transcribing) {
+      // Ignore: transcription is already in flight.
+    } else if (state.busy || state.speaking) {
+      // Cut the AI short / interrupt speech (works even while the queued TTS is still reading).
       speaker.stop();
       if (state.busy) state.ctx?.abort();
-      startRecording();
-      return { consume: true };
     }
-    const now = Date.now();
-    if (now - lastReleaseAt < cfg.input.debounceMs) {
-      return { consume: true }; // debounce the tail of a recent release
-    }
-    startRecording();
+    // Idle: nothing — Esc never exits a mode; only /talk, /listen and the shortcuts toggle modes.
     return { consume: true };
   }
 
@@ -455,7 +519,7 @@ export default function (pi: ExtensionAPI) {
 
   // ── Commands ───────────────────────────────────────────────────────────────
   pi.registerCommand("talk", {
-    description: "Toggle voice mode: hold space to talk, pi answers out loud",
+    description: `Toggle voice mode: hold ${displayKey(cfg.input.key)} to talk, pi answers out loud`,
     handler: async (_args, ctx) => {
       if (ctx.mode !== "tui") {
         ctx.ui.notify("Talk mode requires the interactive terminal", "error");
@@ -527,6 +591,7 @@ export default function (pi: ExtensionAPI) {
     listener.reset();
     relay.stop();
     resetState();
+    stopTalkKeyWatcher();
     lastReleaseAt = 0;
     sayMode = false;
     pendingSay = false;
@@ -545,6 +610,7 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.on("session_shutdown", async () => {
+    stopTalkKeyWatcher();
     recorder?.cancel();
     recorder = null;
     speaker.stop();

@@ -15,13 +15,23 @@
     "format": "mp3"
   },
   "input": {
-    "key": "space",
+    "key": "f5",
+    "keyCode": 96,
+    "talkTerminalApps": [
+      "com.apple.Terminal",
+      "com.googlecode.iterm2",
+      "net.kovidgoyal.kitty",
+      "org.alacritty",
+      "dev.warp.Warp-Stable",
+      "co.zeit.hyper",
+      "com.microsoft.VSCode",
+      "com.github.wez.wezterm"
+    ],
     "listenShortcut": "ctrl+shift+l",
     "talkShortcut": "ctrl+shift+t",
     "conferenceShortcut": "ctrl+shift+c",
     "voiceShortcut": "ctrl+shift+o",
     "micDevice": "MacBook Pro Microphone",
-    "keyCode": 49,
     "pollMs": 25,
     "repeatSilenceMs": 150,
     "debounceMs": 250,
@@ -50,7 +60,7 @@
     "summaryModel": "deepseek/deepseek-chat"
   },
   "say": {
-    "mode": "auto"
+    "mode": "approval"
   },
   "conference": {
     "roomDevice": "BlackHole 2ch",

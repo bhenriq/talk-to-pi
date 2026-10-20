@@ -26,6 +26,7 @@ export function getKeyWatcherBinary(): string | null {
           "-framework", "Foundation",
           "-framework", "CoreGraphics",
           "-framework", "ApplicationServices",
+          "-framework", "AppKit",
           "-o", bin,
           src,
         ].join(" "),
@@ -46,11 +47,12 @@ export function watchKey(
   bin: string,
   keycode: number,
   pollMs: number,
+  terminalBundleIds: string[],
   onState: (down: boolean) => void,
 ): KeyWatcher {
-  const proc = spawn(bin, [String(keycode), String(pollMs)], {
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  const args = [String(keycode), String(pollMs)];
+  if (terminalBundleIds.length > 0) args.push(terminalBundleIds.join(","));
+  const proc = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
   proc.stdout.on("data", (chunk: Buffer) => {
     for (const line of chunk.toString().split("\n")) {
       const t = line.trim();

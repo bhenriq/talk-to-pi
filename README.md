@@ -1,12 +1,12 @@
 # talk-to-pi
 
-A pi extension that adds a **`/talk`** voice mode: hold space to talk, pi answers out loud.
+A pi extension that adds a **`/talk`** voice mode: hold **F5** to talk, pi answers out loud.
 
 [![explainer video](video/poster.png)](video/talk-to-pi.mp4)
 
 *▶ [83-second explainer](video/talk-to-pi.mp4) — same voice the extension speaks with.*
 
-- **Hold `space`** → pi records your voice (`sox` → OpenRouter `input_audio` STT).
+- **Hold `F5`** → pi records your voice (`sox` → OpenRouter `input_audio` STT).
 - **Release** → pi transcribes and auto-submits it as your message.
 - **Esc** → stop pi talking and abort the run (or cancel an in-progress recording). Esc never exits a mode.
 - pi's answers are **spoken aloud** (OpenRouter → ElevenLabs TTS by default, `say` offline fallback), streamed sentence by sentence.
@@ -29,8 +29,8 @@ Restart pi (or run `/reload`), then type `/talk`.
 
 | key | when | action |
 |---|---|---|
-| **hold `space`** | idle, talk mode on | start recording |
-| **space** | while pi is speaking | interrupt + start recording (barge-in) |
+| **hold `F5`** | idle, talk mode on | start recording |
+| **F5** | while pi is speaking | interrupt + start recording (barge-in) |
 | `ctrl+shift+t` | any time | toggle `/talk` |
 | `ctrl+shift+l` | any time | toggle `/listen` |
 | `ctrl+shift+c` | any time | toggle `/conference` |
@@ -65,12 +65,13 @@ node video/build.mjs   # render every frame from the page clock, mux with ffmpeg
   so frames are captured deterministically and never drift from the narration
 - `video/build.mjs` captures frames over CDP at 12 fps and lays the narration on the same offsets
 
-While talk mode is on, `space` is reserved for recording (it is never inserted into the
-editor); all other keys behave normally.
+While talk mode is on, **everything stays editable — including Space**. The talk key is read
+natively from the keyboard, so it never steals a key from the editor. (It only works while your
+terminal app is focused.)
 
 The footer shows the current state: `🎙 talk: idle` · `🎙 listening` · `🎙 transcribing…` ·
 `🧠 thinking` · `🔊 speaking`. While waiting (transcribing or thinking), the wave animates so
-you can see pi is working from the moment you release space until it starts speaking back.
+you can see pi is working from the moment you release the talk key until it starts speaking back.
 
 A soft two-note audio cue (a gentle low→high blip every ~0.6 s) plays during the same wait
 window, so you can also **hear** that pi is processing. It stops the instant speech starts or
@@ -233,7 +234,8 @@ Edit `config.json`:
 | `tts.format` | `mp3` | output format for cloud TTS |
 | `tts.command` | `say` | TTS binary used by the `say` provider |
 | `tts.sayVoice` | `auto` | voice name for the `say` provider |
-| `input.key` / `keyCode` | `space` / `49` | talk key |
+| `input.key` / `keyCode` | `f5` / `96` | talk key (held to talk) |
+| `input.talkTerminalApps` | (terminals) | frontmost-app bundle ids where the talk key counts |
 | `input.listenShortcut` | `ctrl+shift+l` | toggle `/listen` |
 | `input.talkShortcut` | `ctrl+shift+t` | toggle `/talk` |
 | `input.conferenceShortcut` | `ctrl+shift+c` | toggle `/conference` |
@@ -272,12 +274,12 @@ Edit `config.json`:
 | `listen.contextMode` | `summary` | what stays in context on stop: `summary`, `full`, `none` |
 | `say.mode` | `auto` | `/say` behavior: `auto` (speak as it streams) or `approval` (show + wait for Enter) |
 
-## How release is detected
+## How the talk key is detected
 
-Terminals inside tmux (and Terminal.app) do not deliver key-**release** events, so the
-terminal cannot tell when you let go of space. talk-to-pi instead polls the macOS keyboard
-state (`CGEventSourceKeyState`) via `native/keywatcher.m`, compiled on first use by the
-extension. If the native poll cannot see the key, it falls back to autorepeat cadence.
+The talk key (F5 by default) is read directly from the keyboard, so the terminal never sees it at
+all. talk-to-pi polls the macOS keyboard state (`CGEventSourceKeyState`) via `native/keywatcher.m`
+(compiled on first use) for both **press and release**, and only counts the key while one of
+`input.talkTerminalApps` is the frontmost app. That is what lets Space stay free for typing.
 
 ## Costs
 
