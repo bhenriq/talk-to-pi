@@ -10,7 +10,7 @@
     "command": "say",
     "sayVoice": "auto",
     "voice": "rachel",
-    "speed": 1.0,
+    "speed": 1,
     "model": "elevenlabs/eleven-flash-v2.5",
     "format": "mp3"
   },
@@ -48,13 +48,16 @@
     "contextMode": "summary",
     "summaryModel": "deepseek/deepseek-chat"
   },
+  "say": {
+    "mode": "auto"
+  },
   "conference": {
     "outputDevice": "Pi Talks (Zoom mic)",
     "roomDevice": "BlackHole 2ch",
     "remoteTapDevice": "BlackHole 16ch",
     "relayMic": true,
-    "micGain": 1.0,
-    "ttsGain": 1.0,
+    "micGain": 1,
+    "ttsGain": 1,
     "remoteTap": true,
     "muteBusyCue": false,
     "systemInputDevice": "BlackHole 2ch",

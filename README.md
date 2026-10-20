@@ -34,12 +34,20 @@ Restart pi (or run `/reload`), then type `/talk`.
 | `ctrl+shift+t` | any time | toggle `/talk` |
 | `ctrl+shift+l` | any time | toggle `/listen` |
 | `ctrl+shift+c` | any time | toggle `/conference` |
-| `ctrl+shift+o` | any time | open voice & speed menu |
+| `ctrl+shift+o` | any time | open voice, speed & `/say` menu |
 | **release** | recording | stop, transcribe, submit |
 | **Esc** | recording | cancel recording |
 | **Esc** | while pi is working/speaking | stop audio + abort the run |
 | **Esc** | idle | does nothing (never exits a mode) |
 | `/talk` | any time | toggle talk mode |
+| `/say <message>` | any time | send a typed message; pi reads the answer out loud |
+
+**Prefer typing to talking?** `/say <message>` sends the message without push-to-talk — pi
+answers in the terminal as usual and reads the reply out loud. It works whether or not talk mode is
+on. Two modes (pick in `ctrl+shift+o`, or set `say.mode` in `config.json`):
+
+- **`auto`** (default) — pi speaks the answer the moment it streams.
+- **`approval`** — when the answer is ready, pi shows it and asks you to press Enter before speaking (Esc skips).
 
 ## Demo video
 
@@ -181,8 +189,10 @@ curl -s https://openrouter.ai/api/v1/audio/speech \
 
 (`21m00Tcm4TlvDq8ikWAM` = rachel; the other curated ids map is in `src/speaker.ts`.)
 
-**Change voice or speed at any time** with `ctrl+shift+o` (or `/voice`): a small menu lets you
-pick the voice and a speed from 0.8× to 1.2×. It takes effect on pi's next sentence.
+**Change voice, speed, or `/say` mode at any time** with `ctrl+shift+o` (or `/voice`): a small menu
+lets you pick the voice, a speed from 0.8× to 1.2×, and the `/say` reply mode (`auto` vs
+`approval`). Voice and speed take effect on pi's next sentence; the `/say` mode is saved to
+`config.json`.
 
 Swap `tts.provider` to `"say"` for a fully offline voice, with `tts.sayVoice: "auto"`
 picking the best installed macOS English voice.
@@ -236,6 +246,7 @@ Edit `config.json`:
 | `listen.widgetLines` | `8` | transcript lines shown above the editor |
 | `listen.summaryModel` | `deepseek/deepseek-chat` | model that writes the save-time summary + title |
 | `listen.contextMode` | `summary` | what stays in context on stop: `summary`, `full`, `none` |
+| `say.mode` | `auto` | `/say` behavior: `auto` (speak as it streams) or `approval` (show + wait for Enter) |
 
 ## How release is detected
 

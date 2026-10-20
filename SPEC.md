@@ -1,8 +1,8 @@
 # talk-to-pi — voice mode for pi
 
-A pi extension that adds a `/talk` mode: **hold space to speak**, pi answers **out loud**.
+A pi extension that adds a `/talk` mode: **hold space to speak** (or **type `/say`**), pi answers **out loud**.
 
-Status: implemented. `/talk`, `/listen` (pi-labeled lines + summary save-on-stop), and `/conference`
+Status: implemented. `/talk`, `/say`, `/listen` (pi-labeled lines + summary save-on-stop), and `/conference`
 (BlackHole routing + system-device switch) are wired and smoke-tested; push-to-talk, STT/TTS, the
 transcript pipeline, and the save-with-summary flow verified live. Conference routing is verified
 against the installed BlackHole devices but still warrants a real-call shakedown.
@@ -14,6 +14,7 @@ against the installed BlackHole devices but still warrants a real-call shakedown
 | | |
 |---|---|
 | Command | `/talk` — toggles voice mode on/off (or `ctrl+shift+t`) |
+| Typed command | `/say <message>` — send a typed message and have pi read the reply out loud (works with talk mode off; see `say.mode`) |
 | Default on session start | **off** (mode is not persisted across sessions) |
 | Off means | keys behave exactly like stock pi; no recording, no speech |
 | Off-switch | `/talk` again or `ctrl+shift+t`. **Esc never exits a mode** — only the command/shortcut toggles on/off |
@@ -29,6 +30,15 @@ generated once, cached in the temp dir, and killed on speech/Esc/mode-off. See `
 
 While talk mode is on, **space is reserved for recording** and never inserted into the editor; all
 other keys behave normally (including typing, except space).
+
+**`/say` is the typing path.** It never records the mic: it submits the typed text as a normal user
+message and arms exactly one turn of spoken replies. It requires neither talk mode nor any key
+handling, and clears automatically when the turn ends. `say.mode` picks the behavior:
+
+- **`auto`** (default) — pi speaks the reply as it streams, with no interaction.
+- **`approval`** — while the turn streams, the reply text is collected (not spoken); when the turn
+  is ready (agent settles), pi shows the text in a dialog and waits. **Enter** speaks it,
+  **Esc** skips it. Aborting the run suppresses the dialog.
 
 ## 2. Speaking to pi (STT)
 
@@ -83,9 +93,10 @@ POST https://openrouter.ai/api/v1/chat/completions
   voice at runtime (Samantha / Flo / Reed / …), override via config.
 - Talk mode injects a **voice-style nudge** into the system prompt: answers are heard, not read —
   lead with the answer, 1–3 short sentences, no headers/tables/bullets.
-- **Runtime voice/speed menu** (`ctrl+shift+o` or `/voice`): an overlay lets you pick the voice
-  and speed (0.8×–1.2×) between utterances; applied to the next sentence. Cloud TTS passes a
-  `speed` param (clamped to the ElevenLabs 0.7–1.2 range); the `say` provider uses `say -r`.
+- **Runtime voice/speed menu** (`ctrl+shift+o` or `/voice`): an overlay lets you pick the voice,
+  speed (0.8×–1.2×), and `/say` reply mode (`auto` / `approval`). Voice and speed are applied to the
+  next sentence; the `/say` mode is applied immediately and persisted to `config.json`. Cloud TTS
+  passes a `speed` param (clamped to the ElevenLabs 0.7–1.2 range); the `say` provider uses `say -r`.
 
 ## 4. Interrupting pi
 
@@ -146,6 +157,7 @@ space again to talk.
 | `listen.widgetLines` | `8` |
 | `listen.summaryModel` | `deepseek/deepseek-chat` |
 | `listen.contextMode` | `summary` (or `full` / `none`) |
+| `say.mode` | `auto` (or `approval`) — `/say` speaks as it streams, or shows and waits for Enter (also switchable in `ctrl+shift+o`) |
 
 ## 6. Packaging
 

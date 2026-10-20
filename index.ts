@@ -9,7 +9,7 @@ import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-
 import { matchesKey } from "@earendil-works/pi-tui";
 import { BusyAudio } from "./src/busy-audio.ts";
 import { HeadsetWatch } from "./src/headset.ts";
-import { loadConfig } from "./src/config.ts";
+import { loadConfig, saveSayMode } from "./src/config.ts";
 import { Listener } from "./src/listen.ts";
 import { Recorder } from "./src/recorder.ts";
 import { Relay } from "./src/relay.ts";
@@ -47,6 +47,7 @@ export default function (pi: ExtensionAPI) {
   setBusyAudio((active) => busyAudio.setActive(active));
   const headset = new HeadsetWatch(pi, cfg);
   const speech = new SpeechStream();
+  const sayStream = new SpeechStream(); // collects text for approval-mode /say
   const listener = new Listener(cfg);
   speaker.onSpeak = (text) => {
     if (state.listenRecording) listener.addPiLine(text);
@@ -58,6 +59,12 @@ export default function (pi: ExtensionAPI) {
   let prevInputDevice: string | null = null;
   let prevOutputDevice: string | null = null;
   let menuOpen = false;
+  /** Active /say mode for the current turn (false outside /say turns). */
+  let sayMode: false | "auto" | "approval" = false;
+  /** A /say was typed while pi was busy; arm on the next turn instead. */
+  let pendingSay: false | "auto" | "approval" = false;
+  /** Collected speech text for an approval-mode /say turn. */
+  let sayQueue: string[] = [];
 
   function setEnabled(on: boolean, ctx: ExtensionContext) {
     state.ctx = ctx;
@@ -116,6 +123,17 @@ export default function (pi: ExtensionAPI) {
     refreshStatus();
   }
 
+  async function approveSay(ctx: ExtensionContext, sentences: string[]) {
+    const preview = sentences.join(" ").replace(/\s+/g, " ").trim();
+    if (!preview) return;
+    const ok = await ctx.ui.confirm("Hear pi's answer? (Enter to speak, Esc to skip)", preview);
+    if (ok) {
+      for (const s of sentences) speaker.enqueue(s);
+    } else {
+      ctx.ui.notify("Skipped — answer not spoken", "info");
+    }
+  }
+
   function openVoiceMenu(ctx: ExtensionContext) {
     if (ctx.mode !== "tui") {
       ctx.ui.notify("Voice menu requires the interactive terminal", "error");
@@ -130,6 +148,11 @@ export default function (pi: ExtensionAPI) {
             speaker,
             () => done(undefined),
             (m) => ctx.ui.notify(m, "info"),
+            cfg.say.mode,
+            (mode) => {
+              cfg.say.mode = mode;
+              saveSayMode(mode);
+            },
           ),
         { overlay: true, overlayOptions: { width: "44%", anchor: "center", margin: { top: 2 } } },
       )
@@ -405,6 +428,24 @@ export default function (pi: ExtensionAPI) {
     handler: async (_args, ctx) => openVoiceMenu(ctx),
   });
 
+  pi.registerCommand("say", {
+    description: "Type to pi and have the reply read out loud",
+    handler: async (args, ctx) => {
+      if (ctx.mode !== "tui") {
+        ctx.ui.notify("Say mode requires the interactive terminal", "error");
+        return;
+      }
+      const text = (args ?? "").trim();
+      if (!text) {
+        ctx.ui.notify("Usage: /say <message> — pi answers out loud", "info");
+        return;
+      }
+      pendingSay = cfg.say.mode;
+      attach(ctx);
+      pi.sendUserMessage(text);
+    },
+  });
+
   // ── Listen transcript tool ─────────────────────────────────────────────────
   pi.registerTool(
     defineTool({
@@ -431,6 +472,10 @@ export default function (pi: ExtensionAPI) {
     relay.stop();
     resetState();
     lastReleaseAt = 0;
+    sayMode = false;
+    pendingSay = false;
+    sayQueue = [];
+    sayStream.reset();
     recorder?.cancel();
     recorder = null;
     speaker.stop();
@@ -463,19 +508,29 @@ export default function (pi: ExtensionAPI) {
     state.speaking = false;
     speaker.stop(); // drop any stale speech from a previous run
     speech.reset();
+    sayMode = pendingSay; // a queued /say now owns this turn's spoken replies
+    pendingSay = false;
+    sayStream.reset();
+    sayQueue = [];
     refreshStatus();
   });
 
   pi.on("agent_end", (_ev, ctx) => {
     attach(ctx);
     state.busy = false;
+    if (sayMode !== "approval") sayMode = false; // approval is cleared in agent_settled
     refreshStatus();
   });
 
-  pi.on("agent_settled", (_ev, ctx) => {
+  pi.on("agent_settled", (ev, ctx) => {
     attach(ctx);
     state.busy = false;
     // Leave state.speaking alone: the Speaker owns it while the remaining queue plays.
+    if (sayMode === "approval") {
+      const sentences = sayQueue.splice(0);
+      sayMode = false;
+      if (!state.enabled && !ev.aborted && sentences.length > 0) void approveSay(ctx, sentences);
+    }
     refreshStatus();
   });
 
@@ -487,25 +542,29 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("message_update", (ev, ctx) => {
     attach(ctx);
-    if (!state.enabled) return;
     if (state.recording || state.transcribing) return; // never speak over the user's recording
-    if ((ev.message as any)?.role === "assistant") {
+    if ((ev.message as any)?.role !== "assistant") return;
+    if (state.enabled || sayMode === "auto") {
       for (const s of speech.feed(assistantText(ev.message))) speaker.enqueue(s);
+    } else if (sayMode === "approval") {
+      for (const s of sayStream.feed(assistantText(ev.message))) sayQueue.push(s);
     }
   });
 
   pi.on("message_end", (ev, ctx) => {
     attach(ctx);
-    if (!state.enabled) return;
     if (state.recording || state.transcribing) return; // never speak over the user's recording
-    if ((ev.message as any)?.role === "assistant") {
+    if ((ev.message as any)?.role !== "assistant") return;
+    if (state.enabled || sayMode === "auto") {
       for (const s of speech.flush()) speaker.enqueue(s);
+    } else if (sayMode === "approval") {
+      for (const s of sayStream.flush()) sayQueue.push(s);
     }
   });
 
   // ── Context injection (voice nudge + listen transcript) ───────────────────
   pi.on("before_agent_start", (ev) => {
-    if (state.enabled && cfg.promptNudge) {
+    if ((state.enabled || sayMode || pendingSay) && cfg.promptNudge) {
       const guidelines = ev.systemPromptOptions?.promptGuidelines;
       if (Array.isArray(guidelines)) guidelines.push(VOICE_NUDGE);
     }

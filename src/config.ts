@@ -1,8 +1,9 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const CONFIG_PATH = join(__dirname, "..", "config.json");
 
 export interface TalkConfig {
   stt: {
@@ -87,6 +88,14 @@ export interface TalkConfig {
      */
     contextMode: "summary" | "full" | "none";
   };
+  say: {
+    /**
+     * How `/say <message>` behaves:
+     * - `auto` speaks the reply as soon as it streams (default)
+     * - `approval` shows the reply and waits for Enter before speaking
+     */
+    mode: "auto" | "approval";
+  };
   conference: {
     /** Where pi's TTS is played so both you and the room hear it (Multi-Output). */
     outputDevice: string;
@@ -141,6 +150,7 @@ const DEFAULTS: TalkConfig = {
     summaryModel: "deepseek/deepseek-chat",
     contextMode: "summary",
   },
+  say: { mode: "auto" },
   conference: {
     outputDevice: "Pi Talks (Zoom mic)",
     roomDevice: "BlackHole 2ch",
@@ -172,9 +182,21 @@ function merge(base: Record<string, unknown>, over: Record<string, unknown>): Re
 
 export function loadConfig(): TalkConfig {
   try {
-    const raw = JSON.parse(readFileSync(join(__dirname, "..", "config.json"), "utf8"));
+    const raw = JSON.parse(readFileSync(CONFIG_PATH, "utf8"));
     return merge(DEFAULTS as unknown as Record<string, unknown>, raw) as unknown as TalkConfig;
   } catch {
     return JSON.parse(JSON.stringify(DEFAULTS)) as TalkConfig;
+  }
+}
+
+/** Persist a new `/say` mode to config.json and return true on success. */
+export function saveSayMode(mode: "auto" | "approval"): boolean {
+  try {
+    const data = JSON.parse(readFileSync(CONFIG_PATH, "utf8"));
+    data.say = { ...(data.say ?? {}), mode };
+    writeFileSync(CONFIG_PATH, JSON.stringify(data, null, 2) + "\n");
+    return true;
+  } catch {
+    return false;
   }
 }
