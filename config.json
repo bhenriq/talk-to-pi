@@ -50,7 +50,7 @@
     "summaryModel": "deepseek/deepseek-chat"
   },
   "say": {
-    "mode": "approval"
+    "mode": "auto"
   },
   "conference": {
     "roomDevice": "BlackHole 2ch",
