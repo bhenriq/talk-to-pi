@@ -105,11 +105,10 @@ export default function (pi: ExtensionAPI) {
     state.enabled = on;
     if (on) {
       refreshStatus();
-      startTalkKeyWatcher();
+      startTalkKeyWatcher(); // idempotent — also started on session_start
       if (/^f\d+$/i.test(cfg.input.key)) void warnFnKeys(ctx);
       ctx.ui.notify(`Talk mode on — hold ${displayKey(cfg.input.key)} to talk, Esc to interrupt`, "info");
     } else {
-      stopTalkKeyWatcher();
       recorder?.cancel();
       recorder = null;
       speaker.stop();
@@ -189,7 +188,7 @@ export default function (pi: ExtensionAPI) {
   }
 
   function handleTalkKeyDown() {
-    if (!state.enabled || menuOpen) return;
+    if (menuOpen) return;
     if (state.recording || state.transcribing) return;
     if (state.busy || state.speaking) {
       // Barge-in: interrupt pi and start listening immediately.
@@ -662,6 +661,8 @@ export default function (pi: ExtensionAPI) {
     if (ctx.mode === "tui") {
       terminalUnsub?.();
       terminalUnsub = ctx.ui.onTerminalInput((data) => onTerminalInput(data));
+      // The talk key works everywhere (talk mode just adds status/cue); keep it armed.
+      startTalkKeyWatcher();
     }
     headset.start();
     refreshStatus();

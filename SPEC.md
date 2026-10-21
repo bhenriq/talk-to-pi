@@ -45,7 +45,8 @@ handling, and clears automatically when the turn ends. `say.mode` picks the beha
 ## 2. Speaking to pi (STT)
 
 **Hold the talk key** → recording starts. **Release it** → recording stops, audio is transcribed,
-transcript is **auto-submitted** as a normal user message.
+transcript is **auto-submitted** as a normal user message. This works **with or without talk mode**
+— outside talk mode it behaves exactly like typing the prompt.
 
 - **Native key-state poll** — `CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState,
   keyCode)` sampled every ~25 ms via a tiny compiled helper (`clang`, cached binary). It detects

@@ -43,6 +43,9 @@ Restart pi (or run `/reload`), then type `/talk`.
 | `/talk` | any time | toggle talk mode |
 | `/say <message>` | any time | send a typed message; pi reads the answer out loud |
 
+> **F5 works everywhere.** With talk mode off it just captures your voice and submits it like a
+> typed message; talk mode only adds the status line, busy cue, and headset indicator.
+
 **Prefer typing to talking?** `/say <message>` sends the message without push-to-talk — pi
 answers in the terminal as usual and reads the reply out loud. It works whether or not talk mode is
 on. Two modes (pick in `ctrl+shift+o`, or set `say.mode` in `config.json`):
