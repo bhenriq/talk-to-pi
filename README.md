@@ -286,7 +286,9 @@ Edit `config.json`:
 The talk key (F5 by default) is read directly from the keyboard, so the terminal never sees it at
 all. talk-to-pi polls the macOS keyboard state (`CGEventSourceKeyState`) via `native/keywatcher.m`
 (compiled on first use) for both **press and release**, and only counts the key while one of
-`input.talkTerminalApps` is the frontmost app. That is what lets Space stay free for typing.
+`input.talkTerminalApps` is the frontmost app. Inside tmux it also requires this pi's pane to be
+the active one (`#{window_active}:#{pane_active}`), so background pi instances stay silent. That is
+what lets Space stay free for typing.
 
 ## Costs
 

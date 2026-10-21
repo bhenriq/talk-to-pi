@@ -50,7 +50,8 @@ transcript is **auto-submitted** as a normal user message. This works **with or 
 
 - **Native key-state poll** — `CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState,
   keyCode)` sampled every ~25 ms via a tiny compiled helper (`clang`, cached binary). It detects
-  **both press and release** and gates press on the frontmost app being in `input.talkTerminalApps`.
+  **both press and release** and gates press on the frontmost app being in `input.talkTerminalApps`;
+  inside tmux it additionally requires this pi's pane to be the active pane (`#{window_active}:#{pane_active}`).
 - A talk-key press within 250 ms of a release is ignored (debounce), so the tail of a hold never restarts recording.
 - **Talk key while pi is speaking** barge-ins: it interrupts (stops speech + aborts the run) **and** starts
   a new recording immediately, so you can retake the turn.

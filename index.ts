@@ -1,6 +1,7 @@
 // talk-to-pi — hold the talk key to speak, pi answers out loud.
 // See SPEC.md for the full behaviour contract.
 
+import { spawnSync } from "node:child_process";
 import { existsSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -163,6 +164,27 @@ export default function (pi: ExtensionAPI) {
   // releases it; the helper only reports down while a configured terminal app is
   // frontmost so holding the key in another app does nothing.
 
+  /**
+   * Only the focused tmux pane should react to F5. Ask tmux whether THIS pane is
+   * the active pane of the active window; outside tmux there is no pane concept,
+   * so fall back to the frontmost-app check alone (true).
+   */
+  function tmuxPaneActive(): boolean {
+    if (!process.env.TMUX) return true;
+    const args = ["display-message", "-p"];
+    if (process.env.TMUX_PANE) args.push("-t", process.env.TMUX_PANE);
+    args.push("#{window_active}:#{pane_active}");
+    let r;
+    try {
+      r = spawnSync("tmux", args, { encoding: "utf8", timeout: 1000 });
+    } catch {
+      return true;
+    }
+    if (r.error || r.status !== 0) return true;
+    const [win, pane] = (r.stdout ?? "").trim().split(":");
+    return win === "1" && pane === "1";
+  }
+
   function startTalkKeyWatcher() {
     if (talkKeyWatcher) return;
     const bin = getKeyWatcherBinary();
@@ -190,6 +212,7 @@ export default function (pi: ExtensionAPI) {
   function handleTalkKeyDown() {
     if (menuOpen) return;
     if (state.recording || state.transcribing) return;
+    if (!tmuxPaneActive()) return; // a background pane's pi must stay quiet
     if (state.busy || state.speaking) {
       // Barge-in: interrupt pi and start listening immediately.
       speaker.stop();
