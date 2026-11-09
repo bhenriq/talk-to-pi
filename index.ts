@@ -18,6 +18,7 @@ import { Relay } from "./src/relay.ts";
 import { summarizeMeeting } from "./src/summary.ts";
 import { getDefaultDevice, probeDevice, setDefaultDevice } from "./src/system-audio.ts";
 import { VoiceMenu } from "./src/voice-menu.ts";
+import { ModePalette, type ModeId } from "./src/mode-palette.ts";
 import { Speaker } from "./src/speaker.ts";
 import { SpeechStream } from "./src/speech-stream.ts";
 import { clearStatus, refreshStatus, resetState, setBusyAudio, state } from "./src/state.ts";
@@ -74,10 +75,10 @@ export default function (pi: ExtensionAPI) {
   let lastReleaseAt = 0;
   let prevOutputDevice: string | null = null;
   let menuOpen = false;
-  /** Active /say mode for the current turn (false outside /say turns). */
-  let sayMode: false | "auto" | "approval" = false;
-  /** A /say was typed while pi was busy; arm on the next turn instead. */
-  let pendingSay: false | "auto" | "approval" = false;
+  /** How the current turn's reply is delivered (false = silent; "voice" = F5 push-to-talk). */
+  let replyMode: false | "auto" | "approval" | "voice" = false;
+  /** Reply mode queued for the next turn (set before the message is submitted). */
+  let pendingReply: false | "auto" | "approval" | "voice" = false;
   /** Collected speech text for an approval-mode /say turn. */
   let sayQueue: string[] = [];
   let talkKeyWatcher: KeyWatcher | null = null;
@@ -148,6 +149,8 @@ export default function (pi: ExtensionAPI) {
       } else {
         // Mirror pi's "pi:" label for the user's push-to-talk utterance.
         if (state.listenRecording) listener.addUserLine(text);
+        // F5 voice input: the reply is spoken (only while talk mode is on).
+        pendingReply = "voice";
         pi.sendUserMessage(text);
       }
     } catch (err) {
@@ -269,22 +272,46 @@ export default function (pi: ExtensionAPI) {
       });
   }
 
+  function modeOn(id: ModeId): boolean {
+    if (id === "talk") return state.enabled;
+    if (id === "listen") return state.listenRecording;
+    return state.conference;
+  }
+
+  function toggleModeById(id: ModeId, ctx: ExtensionContext) {
+    if (id === "talk") setEnabled(!state.enabled, ctx);
+    else if (id === "listen") void toggleListen(ctx);
+    else void toggleConference(ctx);
+  }
+
+  function openModePalette(ctx: ExtensionContext) {
+    if (ctx.mode !== "tui") {
+      ctx.ui.notify("Mode palette requires the interactive terminal", "error");
+      return;
+    }
+    menuOpen = true;
+    void ctx.ui
+      .custom(
+        (tui, _theme, _kb, done) =>
+          new ModePalette(
+            tui,
+            () => done(undefined),
+            (id) => toggleModeById(id, ctx),
+            (id) => modeOn(id),
+          ),
+        { overlay: true, overlayOptions: { width: "34%", anchor: "center", margin: { top: 2 } } },
+      )
+      .finally(() => {
+        menuOpen = false;
+      });
+  }
+
   function onTerminalInput(data: string): { consume?: boolean; data?: string } | undefined {
     // While the voice menu overlay is focused, pass all keys through to it.
     if (menuOpen) return undefined;
     // Voice & speed menu.
     if (matchesKey(data, cfg.input.voiceShortcut)) {
       if (state.ctx) openVoiceMenu(state.ctx);
-      return { consume: true };
-    }
-    // Conference toggle.
-    if (matchesKey(data, cfg.input.conferenceShortcut)) {
-      if (state.ctx) void toggleConference(state.ctx);
-      return { consume: true };
-    }
-    // Listen toggle works regardless of talk mode.
-    if (matchesKey(data, cfg.input.listenShortcut)) {
-      if (state.ctx) void toggleListen(state.ctx);
       return { consume: true };
     }
     // Show/hide the live transcript widget while /listen is on.
@@ -295,11 +322,6 @@ export default function (pi: ExtensionAPI) {
       } else {
         state.ctx?.ui.notify("Listen mode is off — nothing to show", "info");
       }
-      return { consume: true };
-    }
-    // Talk toggle.
-    if (matchesKey(data, cfg.input.talkShortcut)) {
-      if (state.ctx) setEnabled(!state.enabled, state.ctx);
       return { consume: true };
     }
     const isEsc = matchesKey(data, "escape");
@@ -626,6 +648,13 @@ export default function (pi: ExtensionAPI) {
     handler: async (_args, ctx) => openVoiceMenu(ctx),
   });
 
+  pi.registerShortcut("ctrl+shift+t", {
+    description: "Open the mode palette (talk / listen / conference)",
+    handler: (_ctx) => {
+      openModePalette(_ctx);
+    },
+  });
+
   pi.registerCommand("say", {
     description: "Type to pi and have the reply read out loud",
     handler: async (args, ctx) => {
@@ -638,7 +667,7 @@ export default function (pi: ExtensionAPI) {
         ctx.ui.notify("Usage: /say <message> — pi answers out loud", "info");
         return;
       }
-      pendingSay = cfg.say.mode;
+      pendingReply = cfg.say.mode;
       attach(ctx);
       // Record the typed /say in the live meeting notes as a user line.
       if (state.listenRecording) listener.addUserLine(text);
@@ -673,8 +702,8 @@ export default function (pi: ExtensionAPI) {
     resetState();
     stopTalkKeyWatcher();
     lastReleaseAt = 0;
-    sayMode = false;
-    pendingSay = false;
+    replyMode = false;
+    pendingReply = false;
     sayQueue = [];
     sayStream.reset();
     recorder?.cancel();
@@ -712,8 +741,8 @@ export default function (pi: ExtensionAPI) {
     state.speaking = false;
     speaker.stop(); // drop any stale speech from a previous run
     speech.reset();
-    sayMode = pendingSay; // a queued /say now owns this turn's spoken replies
-    pendingSay = false;
+    replyMode = pendingReply; // a queued /say or F5 now owns this turn's reply delivery
+    pendingReply = false;
     sayStream.reset();
     sayQueue = [];
     refreshStatus();
@@ -722,7 +751,7 @@ export default function (pi: ExtensionAPI) {
   pi.on("agent_end", (_ev, ctx) => {
     attach(ctx);
     state.busy = false;
-    if (sayMode !== "approval") sayMode = false; // approval is cleared in agent_settled
+    if (replyMode !== "approval") replyMode = false; // approval is cleared in agent_settled
     refreshStatus();
   });
 
@@ -730,10 +759,10 @@ export default function (pi: ExtensionAPI) {
     attach(ctx);
     state.busy = false;
     // Leave state.speaking alone: the Speaker owns it while the remaining queue plays.
-    if (sayMode === "approval") {
+    if (replyMode === "approval") {
       const sentences = sayQueue.splice(0);
-      sayMode = false;
-      if (!state.enabled && !ev.aborted && sentences.length > 0) void approveSay(ctx, sentences);
+      replyMode = false;
+      if (!ev.aborted && sentences.length > 0) void approveSay(ctx, sentences);
     }
     // Fold what was heard since the last turn into context (append-only, tail).
     void injectMeetingDelta();
@@ -750,9 +779,9 @@ export default function (pi: ExtensionAPI) {
     attach(ctx);
     if (state.recording || state.transcribing) return; // never speak over the user's recording
     if ((ev.message as any)?.role !== "assistant") return;
-    if (state.enabled || sayMode === "auto") {
+    if (replyMode === "auto" || (replyMode === "voice" && state.enabled)) {
       for (const s of speech.feed(assistantText(ev.message))) speaker.enqueue(s);
-    } else if (sayMode === "approval") {
+    } else if (replyMode === "approval") {
       for (const s of sayStream.feed(assistantText(ev.message))) sayQueue.push(s);
     }
   });
@@ -761,16 +790,20 @@ export default function (pi: ExtensionAPI) {
     attach(ctx);
     if (state.recording || state.transcribing) return; // never speak over the user's recording
     if ((ev.message as any)?.role !== "assistant") return;
-    if (state.enabled || sayMode === "auto") {
+    if (replyMode === "auto" || (replyMode === "voice" && state.enabled)) {
       for (const s of speech.flush()) speaker.enqueue(s);
-    } else if (sayMode === "approval") {
+    } else if (replyMode === "approval") {
       for (const s of sayStream.flush()) sayQueue.push(s);
     }
   });
 
   // ── Context injection (voice nudge + listen transcript) ───────────────────
   pi.on("before_agent_start", (ev) => {
-    if ((state.enabled || sayMode || pendingSay) && cfg.promptNudge) {
+    const willSpeak =
+      pendingReply === "auto" ||
+      pendingReply === "approval" ||
+      (pendingReply === "voice" && state.enabled);
+    if (willSpeak && cfg.promptNudge) {
       const guidelines = ev.systemPromptOptions?.promptGuidelines;
       if (Array.isArray(guidelines)) guidelines.push(VOICE_NUDGE);
     }

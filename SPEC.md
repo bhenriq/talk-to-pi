@@ -13,11 +13,12 @@ against the installed BlackHole devices but still warrants a real-call shakedown
 
 | | |
 |---|---|
-| Command | `/talk` — toggles voice mode on/off (or `ctrl+shift+t`) |
+| Command | `/talk` — toggles voice mode on/off |
+| Mode palette | `ctrl+shift+t` — lists `talk` / `listen` / `conference` (on/off); type to filter, Enter toggles, Esc closes |
 | Typed command | `/say <message>` — send a typed message and have pi read the reply out loud (works with talk mode off; see `say.mode`) |
 | Default on session start | **off** (mode is not persisted across sessions) |
 | Off means | keys behave exactly like stock pi; no recording, no speech |
-| Off-switch | `/talk` again or `ctrl+shift+t`. **Esc never exits a mode** — only the command/shortcut toggles on/off |
+| Off-switch | `/talk` again or the palette. **Esc never exits a mode** — only the command/palette toggles on/off |
 
 While the mode is on, a footer status shows the state:
 `🎙 talk: idle` / `🎙 listening` / `🎙 transcribing …` / `🧠 thinking …` / `🔊 speaking`.
@@ -76,10 +77,12 @@ POST https://openrouter.ai/api/v1/chat/completions
 
 ## 3. Hearing pi (TTS)
 
+- Assistant output is voiced **only for turns you started by voice or `/say`**: an F5 push-to-talk
+  (while talk mode is on) or a `/say` message. Plain typed messages are **silent**, even in talk mode.
 - Assistant output is voiced **sentence by sentence as it streams**, so the first words are heard
   while the answer is still being generated.
-- **All** assistant prose in the run is spoken (each assistant message as it streams), not only the
-  final reply — short lead-ins like "I'll run the tests" are spoken.
+- **All** assistant prose in the spoken run is voiced (each assistant message as it streams), not only
+  the final reply — short lead-ins like "I'll run the tests" are spoken.
 - Only assistant **prose** is spoken:
   - Markdown decoration stripped (`**`, backticks, `#`, bullets, links → text).
   - Fenced code blocks are skipped **silently**.
@@ -90,11 +93,11 @@ POST https://openrouter.ai/api/v1/chat/completions
   back to `say`.
 - `tts.provider: "say"` uses macOS `say`; `tts.sayVoice: "auto"` picks the best installed English
   voice at runtime (Samantha / Flo / Reed / …), override via config.
-- Talk mode injects a **voice-style nudge** into the system prompt: answers are heard, not read —
+- Spoken turns inject a **voice-style nudge** into the system prompt: answers are heard, not read —
   lead with the answer, 1–3 short sentences, no headers/tables/bullets.
 - **Runtime voice/speed menu** (`ctrl+shift+o` or `/voice`): an overlay lets you pick the voice,
   speed (0.8×–1.2×), and `/say` reply mode (`auto` / `approval`). Voice and speed are applied to the
-  next sentence; the `/say` mode is applied immediately and persisted to `config.json`. Cloud TTS
+  next sentence; the `/say` mode is applied immediately and persisted to the user config. Cloud TTS
   passes a `speed` param (clamped to the ElevenLabs 0.7–1.2 range); the `say` provider uses `say -r`.
 
 ## 4. Interrupting pi
@@ -102,14 +105,18 @@ POST https://openrouter.ai/api/v1/chat/completions
 **Esc while pi is speaking or working → audio stops immediately and the run is aborted.** Back to idle; hold
 the talk key again to talk.
 
-- **Esc while idle** does nothing — Esc never exits a mode; only `/talk`, `/listen`, or the
-  `ctrl+shift+t` / `ctrl+shift+l` shortcuts toggle modes.
+- **Esc while idle** does nothing — Esc never exits a mode; only `/talk` / `/listen` /
+  `/conference` or the `ctrl+shift+t` palette toggle modes.
 - **Esc while transcribing** is ignored (the transcript still auto-submits).
 - **Talk key while pi is speaking** barge-ins: same interrupt as Esc, plus a new recording starts immediately.
 - Killing the audio means killing the active playback process (`afplay` for cloud TTS, `say` for the
   offline provider) and dropping the sentence queue; nothing already killed can leak through.
 
-## 5. Configuration (`config.json` next to the extension)
+## 5. Configuration (`~/.pi/agent/talk-to-pi.json`)
+
+The shipped [`config.json`](config.json) supplies defaults; the user file overrides it key by key
+(built-in defaults → shipped config → user file). `TALK_TO_PI_CONFIG` points at another file.
+
 
 | key | default |
 |---|---|
@@ -125,15 +132,12 @@ the talk key again to talk.
 | `stt.channels` / `stt.bits` | `1` / `16` |
 | `input.key` | `f5` |
 | `input.keyCode` | `96` (macOS virtual keycode for F5) |
-| `input.talkTerminalApps` | terminal bundle ids (see config.json) |
+| `input.talkTerminalApps` | terminal bundle ids (see the shipped config.json) |
 | `input.pollMs` | `25` |
 | `input.repeatSilenceMs` | `150` (unused — kept for backward compatibility) |
 | `input.debounceMs` | `250` |
 | `input.minRecordingMs` | `400` |
-| `input.listenShortcut` | `ctrl+shift+l` |
-| `input.talkShortcut` | `ctrl+shift+t` |
 | `input.transcriptShortcut` | `ctrl+shift+m` (show/hide live transcript widget) |
-| `input.conferenceShortcut` | `ctrl+shift+c` |
 | `input.voiceShortcut` | `ctrl+shift+o` |
 | `input.micDevice` | `MacBook Pro Microphone` |
 | `conference.roomDevice` | `BlackHole 2ch` |
@@ -165,9 +169,14 @@ the talk key again to talk.
 
 ## 6. Packaging
 
-- Lives in this repo (`~/Documents/Dev/talk-to-pi`), installed as
-  `~/.pi/agent/extensions/talk` → symlink to the repo, so it loads in every pi session.
-- Dev loop: `pi --extension ./talk-to-pi` or `/reload` in an existing session.
+- Lives in this repo (`~/Documents/Dev/talk-to-pi`) and installs as a regular pi package:
+  `pi install git:github.com/bhenriq/talk-to-pi`. Pi clones it under `~/.pi/agent/git/`, runs
+  `npm install`, and loads `./index.ts` from `package.json` → `pi.extensions` in every session.
+- The package has no runtime npm dependencies; pi APIs are declared as `peerDependencies` only.
+- Native helpers compile on first use into `native/build/` (gitignored, rebuilt on demand).
+- User configuration lives outside the clone (`~/.pi/agent/talk-to-pi.json`), so
+  `pi update --extensions` can reset the checkout without losing settings.
+- Dev loop: `pi -e ./` from the repo, or `pi --extension ./index.ts`; use `/reload` in an existing session.
 
 ## 7. Engineering constraints
 
@@ -188,7 +197,7 @@ the talk key again to talk.
 
 ## 8. Listen mode (`/listen`)
 
-A separate, listen-only mode. `/listen` or the `ctrl+shift+l` shortcut toggles it.
+A separate, listen-only mode. `/listen` (or the `ctrl+shift+t` palette) toggles it.
 
 - Repeatedly records the **microphone** into raw PCM with `sox` and slices it into
   `listen.chunkSeconds` chunks; silent chunks (RMS < `silenceThreshold`) are skipped.
@@ -256,7 +265,7 @@ Decisions locked in:
   `voiceDevice` (sox, the voice path) so participants hear it; a single long-lived sox stream means
   the short notes are not swallowed by the Multi-Output's startup latency, and the `/listen` remote
   tap is not on that path. `muteBusyCue` (default false) silences it entirely in calls.
-- Status bar shows `🔊 conf: on`. Toggled by `/conference` or `ctrl+shift+c`.
+- Status bar shows `🔊 conf: on`. Toggled by `/conference` or the `ctrl+shift+t` palette.
 - **Headset watch**: while talk or conference is on, `audio.headsetDevice` is probed every 3 s via
   `audio-default probe` (present + alive + output streams). The footer shows `🎧 headset: on|off`
   and a transition notifies the user. A switched-off Bluetooth headset is absent from CoreAudio's

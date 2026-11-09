@@ -1,0 +1,40 @@
+{
+  "name": "talk-to-pi",
+  "version": "1.0.0",
+  "description": "Voice mode for pi: hold F5 to talk, pi answers out loud (macOS)",
+  "keywords": [
+    "pi-package",
+    "voice",
+    "speech",
+    "stt",
+    "tts",
+    "macos"
+  ],
+  "type": "module",
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "image": "./video/poster.png",
+    "video": "./video/talk-to-pi.mp4"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bhenriq/talk-to-pi.git"
+  },
+  "files": [
+    "index.ts",
+    "src",
+    "native",
+    "config.json",
+    "README.md",
+    "SPEC.md",
+    "video/poster.png",
+    "video/talk-to-pi.mp4"
+  ]
+}

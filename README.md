@@ -9,46 +9,67 @@ A pi extension that adds a **`/talk`** voice mode: hold **F5** to talk, pi answe
 - **Hold `F5`** → pi records your voice (`sox` → OpenRouter `input_audio` STT).
 - **Release** → pi transcribes and auto-submits it as your message.
 - **Esc** → stop pi talking and abort the run (or cancel an in-progress recording). Esc never exits a mode.
-- pi's answers are **spoken aloud** (OpenRouter → ElevenLabs TTS by default, `say` offline fallback), streamed sentence by sentence.
+- pi's answers are **spoken aloud** only when you used **F5** (voice in) or **`/say`** (OpenRouter → ElevenLabs TTS by default, `say` offline fallback), streamed sentence by sentence. Plain typed messages stay silent, even in talk mode.
 
-See [`SPEC.md`](SPEC.md) for the full behaviour contract and [`config.json`](config.json) for tunables.
+See [`SPEC.md`](SPEC.md) for the full behaviour contract and [`config.json`](config.json) for the shipped defaults.
 
 ## Install
 
-```sh
-# global (available in every pi session)
-ln -sfn "$PWD" ~/.pi/agent/extensions/talk
+It is a pi package: install once and every pi session loads it.
 
-# or project-only during development
-pi --extension ./talk-to-pi
+```sh
+pi install git:github.com/bhenriq/talk-to-pi
 ```
 
-Restart pi (or run `/reload`), then type `/talk`.
+That clones the package, installs its dependencies, and records it in
+`~/.pi/agent/settings.json`. Restart pi (or run `/reload`), then type `/talk`.
+
+```sh
+pi list                              # shows: git:github.com/bhenriq/talk-to-pi
+pi config                            # Extensions → index.ts (enabled)
+pi update --extensions               # upgrade
+pi remove git:github.com/bhenriq/talk-to-pi
+```
+
+Pi names the extension after its entry file, so it appears as **`index.ts`** in `pi config`.
+
+Try it without installing, for one session:
+
+```sh
+pi -e git:github.com/bhenriq/talk-to-pi
+
+# or from a clone
+pi -e ./
+```
+
+The native helpers (`native/*.m`) are compiled with `clang` on first use. Your settings live in
+`~/.pi/agent/talk-to-pi.json`, outside the package clone, so they survive updates.
 
 ## Usage
 
 | key | when | action |
 |---|---|---|
-| **hold `F5`** | idle, talk mode on | start recording |
+| **hold `F5`** | any time | start recording |
 | **F5** | while pi is speaking | interrupt + start recording (barge-in) |
-| `ctrl+shift+t` | any time | toggle `/talk` |
-| `ctrl+shift+l` | any time | toggle `/listen` |
+| `ctrl+shift+t` | any time | open the mode palette (type to filter, Enter toggles) |
 | `ctrl+shift+m` | while listening | show/hide the live transcript widget |
-| `ctrl+shift+c` | any time | toggle `/conference` |
 | `ctrl+shift+o` | any time | open voice, speed & `/say` menu |
 | **release** | recording | stop, transcribe, submit |
 | **Esc** | recording | cancel recording |
 | **Esc** | while pi is working/speaking | stop audio + abort the run |
-| **Esc** | idle | does nothing (never exits a mode) |
+| **Esc** | idle | passed to pi-vim/editor (never exits a mode) |
 | `/talk` | any time | toggle talk mode |
 | `/say <message>` | any time | send a typed message; pi reads the answer out loud |
+
+**Mode palette** — `ctrl+shift+t` opens a small list (`talk`, `listen`, `conference`, each tagged
+`on/off`). Type to filter (`cnf` → conference), `↑/↓` or `ctrl+n/p` to move, Enter toggles, Esc closes.
 
 > **F5 works everywhere.** With talk mode off it just captures your voice and submits it like a
 > typed message; talk mode only adds the status line, busy cue, and headset indicator.
 
 **Prefer typing to talking?** `/say <message>` sends the message without push-to-talk — pi
 answers in the terminal as usual and reads the reply out loud. It works whether or not talk mode is
-on. Two modes (pick in `ctrl+shift+o`, or set `say.mode` in `config.json`):
+on. Two modes (pick in `ctrl+shift+o`, or set `say.mode` in `~/.pi/agent/talk-to-pi.json`):
 
 - **`auto`** (default) — pi speaks the answer the moment it streams.
 - **`approval`** — when the answer is ready, pi shows it and asks you to press Enter before speaking (Esc skips).
@@ -166,7 +187,7 @@ room and mic gain give it — so pi usually sounds louder. Set `conference.micGa
 bring yourself up, or `conference.ttsGain` (e.g. `0.7`) to bring pi down. Both are linear gains
 (`sox ... vol`). If boosting the mic past ~2× starts to sound harsh, your mic was already near full
 scale — lower `ttsGain` instead. Gains are read when conference mode starts, so toggle it off/on
-after editing `config.json`.
+after editing the config file (see [Configuration](#configuration)).
 
 **One-time setup:**
 
@@ -201,7 +222,7 @@ column included, automatically.
 ## Voices
 
 The default TTS voice is **rachel** at **1×** (ElevenLabs Flash v2.5, through OpenRouter — no extra key).
-Available curated voices, set via `tts.voice` in `config.json`:
+Available curated voices, set via `tts.voice` in `~/.pi/agent/talk-to-pi.json`:
 
 `aria` · `rachel` · `sarah` · `adam` · `antoni` · `george` — or any raw ElevenLabs voice id.
 
@@ -220,14 +241,18 @@ curl -s https://openrouter.ai/api/v1/audio/speech \
 **Change voice, speed, or `/say` mode at any time** with `ctrl+shift+o` (or `/voice`): a small menu
 lets you pick the voice, a speed from 0.8× to 1.2×, and the `/say` reply mode (`auto` vs
 `approval`). Voice and speed take effect on pi's next sentence; the `/say` mode is saved to
-`config.json`.
+`~/.pi/agent/talk-to-pi.json`.
 
 Swap `tts.provider` to `"say"` for a fully offline voice, with `tts.sayVoice: "auto"`
 picking the best installed macOS English voice.
 
 ## Configuration
 
-Edit `config.json`:
+Edit `~/.pi/agent/talk-to-pi.json`. It starts out absent: the shipped [`config.json`](config.json)
+is the default, so create your file with only the keys you want to override (a full copy is written
+the first time you change `/say` mode from the voice menu). Set `TALK_TO_PI_CONFIG` to use a
+different file, for example while developing a clone. The merge order is built-in defaults →
+shipped `config.json` → your file.
 
 | key | default | meaning |
 |---|---|---|
@@ -242,11 +267,10 @@ Edit `config.json`:
 | `tts.sayVoice` | `auto` | voice name for the `say` provider |
 | `input.key` / `keyCode` | `f5` / `96` | talk key (held to talk) |
 | `input.talkTerminalApps` | (terminals) | frontmost-app bundle ids where the talk key counts |
-| `input.listenShortcut` | `ctrl+shift+l` | toggle `/listen` |
-| `input.talkShortcut` | `ctrl+shift+t` | toggle `/talk` |
 | `input.transcriptShortcut` | `ctrl+shift+m` | show/hide live transcript widget |
-| `input.conferenceShortcut` | `ctrl+shift+c` | toggle `/conference` |
 | `input.voiceShortcut` | `ctrl+shift+o` | open voice & speed menu |
+
+> Mode toggles now use the **`ctrl+shift+t` palette** (registered via `registerShortcut`), so there are no per-mode shortcut keys in `input`.
 | `input.micDevice` | `MacBook Pro Microphone` | the mic always used for talk + `/listen` (never the headset mic) |
 | `input.pollMs` | `25` | native release-poll interval |
 | `input.repeatSilenceMs` | `150` | autorepeat-fallback release threshold |

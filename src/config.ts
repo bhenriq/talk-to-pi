@@ -1,9 +1,13 @@
-import { readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const CONFIG_PATH = join(__dirname, "..", "config.json");
+/** Defaults shipped with the package (also the dev config when editing a clone). */
+const PACKAGE_CONFIG_PATH = join(__dirname, "..", "config.json");
+/** Per-user overrides; survives package updates (`pi install` resets the clone). */
+const USER_CONFIG_PATH = join(homedir(), ".pi", "agent", "talk-to-pi.json");
 
 export interface ConferenceOutputs {
   /** Where pi's TTS plays so both you and the room hear it (a Multi-Output). */
@@ -41,16 +45,10 @@ export interface TalkConfig {
      * terminal(s)). Holding the talk key while another app is frontmost is ignored.
      */
     talkTerminalApps: string[];
-    /** Keyboard shortcut to toggle /listen (start/stop mic transcription). */
-    listenShortcut: string;
-    /** Keyboard shortcut to toggle /talk mode. */
-    talkShortcut: string;
-    /** Keyboard shortcut to show/hide the live transcript widget while /listen is on. */
-    transcriptShortcut: string;
-    /** Keyboard shortcut to toggle /conference mode. */
-    conferenceShortcut: string;
     /** Keyboard shortcut to open the voice & speed menu. */
     voiceShortcut: string;
+    /** Keyboard shortcut to show/hide the live transcript widget. */
+    transcriptShortcut: string;
     /** The microphone always used for talk and /listen (never the headset mic). */
     micDevice: string;
     pollMs: number;
@@ -162,11 +160,8 @@ const DEFAULTS: TalkConfig = {
       "com.microsoft.VSCode",
       "com.github.wez.wezterm",
     ],
-    listenShortcut: "ctrl+shift+l",
-    talkShortcut: "ctrl+shift+t",
-    transcriptShortcut: "ctrl+shift+m",
-    conferenceShortcut: "ctrl+shift+c",
     voiceShortcut: "ctrl+shift+o",
+    transcriptShortcut: "ctrl+shift+m",
     micDevice: "MacBook Pro Microphone",
     pollMs: 25,
     repeatSilenceMs: 150,
@@ -240,21 +235,52 @@ export function localPlaybackDevice(cfg: TalkConfig, headset: boolean | null): s
   return "";
 }
 
-export function loadConfig(): TalkConfig {
+function readConfigObject(path: string): Record<string, unknown> | undefined {
   try {
-    const raw = JSON.parse(readFileSync(CONFIG_PATH, "utf8"));
-    return merge(DEFAULTS as unknown as Record<string, unknown>, raw) as unknown as TalkConfig;
+    const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
   } catch {
-    return JSON.parse(JSON.stringify(DEFAULTS)) as TalkConfig;
+    // Missing or unreadable files are not fatal: fall back to the next layer.
   }
+  return undefined;
 }
 
-/** Persist a new `/say` mode to config.json and return true on success. */
+/**
+ * Where edits and `/say` mode changes are written: `TALK_TO_PI_CONFIG` when set,
+ * otherwise `~/.pi/agent/talk-to-pi.json`. Never the package clone, which
+ * `pi update --extensions` resets.
+ */
+function writableConfigPath(): string {
+  const explicit = process.env.TALK_TO_PI_CONFIG?.trim();
+  if (explicit) return isAbsolute(explicit) ? explicit : resolve(process.cwd(), explicit);
+  return USER_CONFIG_PATH;
+}
+
+/** Built-in defaults → shipped config.json → the user's overrides. */
+function configPaths(): string[] {
+  const user = writableConfigPath();
+  return user === PACKAGE_CONFIG_PATH ? [PACKAGE_CONFIG_PATH] : [PACKAGE_CONFIG_PATH, user];
+}
+
+export function loadConfig(): TalkConfig {
+  let cfg = JSON.parse(JSON.stringify(DEFAULTS)) as Record<string, unknown>;
+  for (const path of configPaths()) {
+    const raw = readConfigObject(path);
+    if (raw) cfg = merge(cfg, raw);
+  }
+  return cfg as unknown as TalkConfig;
+}
+
+/** Persist a new `/say` mode to the user config and return true on success. */
 export function saveSayMode(mode: "auto" | "approval"): boolean {
   try {
-    const data = JSON.parse(readFileSync(CONFIG_PATH, "utf8"));
-    data.say = { ...(data.say ?? {}), mode };
-    writeFileSync(CONFIG_PATH, JSON.stringify(data, null, 2) + "\n");
+    const data = loadConfig() as unknown as Record<string, unknown>;
+    data.say = { ...(data.say as Record<string, unknown>), mode };
+    const path = writableConfigPath();
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, JSON.stringify(data, null, 2) + "\n");
     return true;
   } catch {
     return false;
